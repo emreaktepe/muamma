@@ -100,8 +100,8 @@ function setupView() {
       </select>
     </div>`).join('');
   return `<div class="setup">
-    <div class="hero"><img src="assets/logo_muamma.webp" alt="MUAMMA amblemi"><div>
-      <h1>MUAMMA</h1><p class="sub">İstanbul'un Yedi Tılsımı · dijital prototip v0.1</p>
+    <div class="hero"><img src="assets/logo_a.webp" alt="MUAMMA logosu"><div>
+      <h1>İstanbul'un Yedi Tılsımı</h1><p class="sub">Dijital prototip v0.1</p>
       <p>Dört çağ, dört cinayet ve aranızda gizlenen bir Gölge. Bu prototip kuralları denemek, dengeyi ölçmek ve oyunu birlikte anlamak için.</p>
     </div></div>
     <div class="panel-card">
@@ -122,6 +122,10 @@ function setupView() {
         ${saved && !saved.winner ? '<button class="btn" data-act="resume">Kayıtlı oyuna devam et</button>' : ''}
         <button class="btn ghost" data-act="help">Kurallar</button>
       </div>
+    </div>
+    <div class="showcase">
+      <figure><img src="assets/kutu_3d.webp" alt="MUAMMA kutusu"><figcaption>Kutu</figcaption></figure>
+      <figure><img src="assets/oynanis.webp" alt="Masada MUAMMA oynanışı"><figcaption>Masada oynanış</figcaption></figure>
     </div>
     <img class="lineup" src="assets/dizilis.webp" alt="Sekiz karakterin dizilişi">
   </div>`;
@@ -188,7 +192,7 @@ function eraIntroView() {
 function headerView() {
   const e = era(S);
   return `<header class="topbar" style="--era:${e.color}">
-    <div class="brand">MUAMMA</div>
+    <div class="brand"><img src="icons/icon-32.png" alt="">MUAMMA</div>
     <div class="era"><b>${esc(e.perde)}</b> · ${esc(e.year)} · ${esc(caseOf(S).title)}</div>
     <div class="day">${S.phase === 'divan' ? 'Divan' : S.phase === 'night' ? `Gece ${S.day}` : `Gün ${S.day}/${e.days}`}</div>
     <div class="tils" title="Tılsımlar: ${tilsimCount(S)}/7 (2'ye düşerse Gölge kazanır)">${tilsimIcons()}</div>
