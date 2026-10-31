@@ -121,6 +121,7 @@ function setupView() {
         <button class="btn gold" data-act="start">Oyunu başlat</button>
         ${saved && !saved.winner ? '<button class="btn" data-act="resume">Kayıtlı oyuna devam et</button>' : ''}
         <button class="btn ghost" data-act="help">Kurallar</button>
+        ${window.MUAMMA_canInstall?.() ? '<button class="btn" data-act="install">Uygulamayı yükle</button>' : ''}
       </div>
     </div>
     <div class="showcase">
@@ -645,6 +646,23 @@ function alertSetup() {
   p.textContent = ui.error;
   app.querySelector('.panel-card')?.prepend(p);
 }
+
+// Uygulama olarak yüklenebilsin diye service worker (yalnız yayınlanan sürümde)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+// Tarayıcı izin verirse kurulum ekranında "Uygulamayı yükle" düğmesi
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (!S) render(); });
+window.addEventListener('appinstalled', () => { installPrompt = null; if (!S) render(); });
+app.addEventListener('click', async (ev) => {
+  if (!ev.target.closest('[data-act="install"]') || !installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => null);
+  installPrompt = null;
+  render();
+});
+window.MUAMMA_canInstall = () => !!installPrompt;
 
 // Test ve hata ayıklama için konsoldan erişim
 window.MUAMMA = { get state() { return S; }, CASES, LOCATIONS, CHAR_BY_ID, paragraphAt, abilityUsable };
