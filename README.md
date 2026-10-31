@@ -1,5 +1,7 @@
 # MUAMMA: İstanbul'un Yedi Tılsımı · dijital prototip
 
+**Hemen oyna:** https://emreaktepe.github.io/muamma/
+
 İstanbul'un dört çağında (532, 1580, 1933, bugün) geçen, gizli hainli bir dedektif kutu oyununun tarayıcıda oynanabilir prototipi. Amaç, basılı sürümden önce kuralları dijitalde denemek, dengeyi ölçmek ve oyunu ekipçe anlamak.
 
 DOT 101 Oyun Tasarımı ve Temelleri · Ekip ÇET
@@ -14,6 +16,8 @@ Gereken: [Node.js](https://nodejs.org) 18 veya üstü.
 npm install
 npm run dev        # tarayıcıda http://localhost:5173 adresini aç
 ```
+
+Windows'ta `Cannot find module @rollup/rollup-win32-x64-msvc` hatası alırsan `node_modules` klasörünü ve `package-lock.json` dosyasını silip `npm install` komutunu tekrar çalıştır (npm'in isteğe bağlı paket hatası).
 
 | Komut | Ne yapar |
 | --- | --- |
