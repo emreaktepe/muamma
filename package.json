@@ -1,0 +1,23 @@
+{
+  "name": "muamma",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MUAMMA: İstanbul'un Yedi Tılsımı — dijital prototip",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "sim": "node scripts/simulate.js"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "@fontsource/cinzel": "^5.0.0",
+    "@fontsource/cormorant-garamond": "^5.0.0",
+    "@fontsource/courier-prime": "^5.0.0"
+  }
+}
