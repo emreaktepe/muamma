@@ -15,6 +15,8 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
 await page.goto('http://localhost:4173/');
+await page.waitForSelector('[data-act="land-start"], [data-act="start"]');
+if (await page.$('[data-act="land-start"]')) await page.click('[data-act="land-start"]');
 await page.waitForSelector('[data-act="start"]');
 await page.fill('[data-in="seed"]', seed);
 await page.dispatchEvent('[data-in="seed"]', 'change');
