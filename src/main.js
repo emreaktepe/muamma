@@ -258,7 +258,7 @@ function izChips(iz) {
 
 function charCard(p, ctx = 'rol') {
   const c = charOf(p);
-  return `<div class="charcard">${flipCard({ id: fid('kart', ctx, p.id), cls: 'card-flip', delay: 250, toggle: true, label: 'Karakter kartını çevir', front: `<div class="named-card"><img src="assets/karakter_${c.id}.webp" alt="${esc(c.name)}"><div class="card-caption"><strong>${esc(c.name)}</strong><span>${esc(c.abilityName)}</span></div><p class="card-description">${esc(c.abilityText)}</p></div>` })}<div>
+  return `<div class="charcard">${flipCard({ id: fid('kart', ctx, p.id), cls: 'card-flip', delay: 250, toggle: true, label: 'Karakter kartını çevir', front: `<div class="named-card"><div class="card-art"><img src="assets/karakter_${c.id}.webp" alt="${esc(c.name)}"><div class="card-caption"><strong>${esc(c.name)}</strong><span>${esc(c.abilityName)}</span></div></div><p class="card-description">${esc(c.abilityText)}</p></div>` })}<div>
     <h3>${esc(c.name)}</h3><p class="era-tag">${esc(c.era)}</p>
     <p><b>${esc(c.abilityName)}:</b> ${esc(c.abilityText)}</p>
     <div class="chips">${izChips(c.iz)}</div></div></div>`;

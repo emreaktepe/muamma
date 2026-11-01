@@ -9,3 +9,4 @@ body{background:#0b1421}button,input,select{font-family:system-ui,sans-serif;fon
 .charcard{display:grid;grid-template-columns:145px minmax(0,1fr)}.charcard .card-flip{max-width:100%;width:100%}.charcard .named-card img{width:100%;max-width:100%}.ac-sub{white-space:normal!important;overflow:visible!important;display:block!important;-webkit-line-clamp:unset!important}.act-card{min-height:100px}.ac-body{min-width:0}.topbar .era{font-size:15px}.topbar .meta{font-size:13px}.stage{aspect-ratio:4/3}
 @media(max-width:760px){.charcard{grid-template-columns:110px minmax(0,1fr)}}
 .named-card .card-caption{bottom:auto;top:82.5%;height:14%}.card-description{font:12px/1.5 system-ui,sans-serif!important;color:#eee4cf;margin:10px 0 0!important}.setup .row2 label:nth-child(2){flex-basis:200px}.setup .panel-card{align-self:start}
+.card-art{position:relative}.card-art .card-caption{top:82.5%;bottom:auto;height:14%}
