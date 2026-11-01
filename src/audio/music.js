@@ -221,12 +221,24 @@ function syncBtn() {
   btn.setAttribute('aria-label', label); btn.title = label;
 }
 
+let slider = null;
 function mountBtn() {
   if (btn || typeof document === 'undefined' || !document.body) return;
+  const box = document.createElement('div');
+  box.className = 'audio-box';
+  slider = document.createElement('input');
+  slider.type = 'range'; slider.min = '0'; slider.max = '100'; slider.step = '5';
+  slider.className = 'audio-vol'; slider.setAttribute('aria-label', 'Müzik sesi');
+  slider.value = String(Math.round((settings.volume ?? 1) * 100));
+  slider.addEventListener('input', () => {
+    setVolume(Number(slider.value) / 100);
+    if (settings.muted && Number(slider.value) > 0) toggleMute();
+  });
   btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'audio-fab';
   btn.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(); });
-  document.body.appendChild(btn);
+  box.append(slider, btn);
+  document.body.appendChild(box);
   syncBtn();
 }
 
