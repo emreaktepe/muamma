@@ -397,6 +397,7 @@ function caseView() {
 function suspectTable() {
   const ev = publicEvidence(S);
   const cats = Object.keys(IZ_CATEGORIES);
+  const must = new Set(ev.filter((e) => e.kind === 'must').map((e) => `${e.cat}=${e.val}`));
   const SRC = { iz: 'Ceset', ruh: 'Rüya', delil: 'Delil', kazi: 'Kazı' };
   const evText = ev.map((e) => {
     const key = e.kind === 'must' ? `${e.cat}=${e.val}` : e.items.map((x) => `${x.cat}=${x.val}`).join('|');
@@ -571,6 +572,7 @@ function divanView() {
   const d = S.divan;
   const c = caseOf(S);
   const title = `${v2img(d.final ? 'buyuk_divan' : 'divan', 'scene-img')}${d.final ? 'Büyük Divan' : `Divan · ${esc(era(S).perde)}`}`;
+  const head = divanStepper(d.step);
   if (d.step === 'ruh') {
     const r = player(S, d.ruhQueue[0]);
     if (r.isBot) return `<h2 class="m-title">${ico('gavel')}${title}</h2>${head}<p class="thinking" role="status">${esc(r.name)}'in Ruhu bir rüya seçiyor<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></p>`;
@@ -589,7 +591,7 @@ function divanView() {
       const txt = vote ? `${esc(c.suspects.find((x) => x.id === vote.suspect).name)} · ${esc(c.methods.find((m) => m.id === vote.method).label)}` : v.isBot ? '<i>düşünüyor…</i>' : '<i>bekliyor</i>';
       return `<div class="vrow">${avatar(v)} <b>${esc(v.name)}</b> <span class="chip">${txt}</span></div>`;
     }).join('');
-    return `<h2>${title} · Vaka suçlaması</h2>
+    return `<h2 class="m-title">${ico('gavel')}${title} · Vaka suçlaması</h2>${head}
       <p><b>${esc(c.victim)}</b>'i kim öldürdü, nasıl? Önce masada tartışın, sonra herkes kendi oyunu versin. En çok oy alan şüpheli ve yöntem Divan'ın kararıdır.</p>
       <div class="votes">${rows}</div>
       ${next ? `<form data-form="accuse" class="accuse"><input type="hidden" name="voter" value="${next.id}">
@@ -610,7 +612,7 @@ function divanView() {
   if (d.step === 'sonuc') {
     const last = [...S.defter].reverse().find((e) => e.type === 'divan');
     const skip = d.skipExile === 'erken' ? `${RULES.EXILE_MODE === 'gozalti' ? 'Gözaltı' : 'Sürgün'} oylaması Perde ${['I', 'II', 'III', 'IV'][RULES.EXILE_FROM_ERA]}'den itibaren yapılır.` : 'Oylama hakkı kalmadı.';
-    return `<h2>${title}</h2>${d.skipExile ? `<p class="hint">${skip}</p>` : `<p class="paper">${esc(last?.text || '')}</p>`}
+    return `<h2 class="m-title">${ico('check')}${title}</h2>${head}${d.skipExile ? `<p class="hint">${skip}</p>` : `<p class="paper">${esc(last?.text || '')}</p>`}
       <button class="btn gold" data-act="divan-next">Usturlabı çevir: sonraki perde</button>`;
   }
   return `<h2 class="m-title">${title}</h2><p>…</p>`;
@@ -621,9 +623,11 @@ function voteView(title, final) {
   const voters = activePlayers(S);
   const cands = activePlayers(S);
   const tally = voteTally(S);
+  const need = Math.floor(voters.length / 2) + 1;
+  const top = Math.max(1, ...Object.values(tally));
   const gz = RULES.EXILE_MODE === 'gozalti';
   const delilChips = S.delilRevealed.map((x, i) => flipCard({ id: fid('delil', x.cat, x.val), tag: 'span', delay: i * 180, front: `<span class="chip">${izIcon(x.cat, x.shown ? x.shown[0] : x.val)}${IZ_CATEGORIES[x.cat].label}: ${x.shown ? `ya ${esc(x.shown[0])} ya ${esc(x.shown[1])}` : esc(x.val)}</span>` })).join(' ');
-  return `<h2>${title} · ${final ? 'Gölge kim?' : gz ? 'Gözaltı oylaması' : 'Sürgün oylaması'}</h2>
+  return `<h2 class="m-title">${ico('vote')}${title} · ${final ? 'Gölge kim?' : gz ? 'Gözaltı oylaması' : 'Sürgün oylaması'}</h2>${divanStepper(d.step)}
     ${final ? `<p>${S.mission ? `Gölge'nin görevi "${esc(S.mission.title)}" tutmadı. ` : ''}Delil Kutusu açıldı: ${delilChips || 'hiç pul açılmadı.'}</p>`
       : gz ? `<p>Şüphelendiğiniz biri var mı? Çoğunluk (${Math.floor(voters.length / 2) + 1} oy) bir kişiyi gözaltına alırsa o oyuncu bir sonraki perde hiçbir eylem yapamaz; Gölge'yse gece hamlesi de yapamaz. Rol kartı kapalı kalır. "Pas" da geçerli bir oydur.</p>`
       : `<p>Biri Gölge mi? Çoğunluk (${Math.floor(voters.length / 2) + 1} oy) bir kişiyi sürerse rol kartı açılır. Masum biri sürülürse bir tılsım kaybolur.</p>`}
