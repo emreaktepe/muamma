@@ -19,7 +19,7 @@ export function landingView(saved, canInstall = !!window.MUAMMA_canInstall?.()) 
         <button class="l-btn ghost" data-act="help">Kurallar</button>
         ${canInstall ? '<button class="l-btn ghost" data-act="install">Uygulamayı yükle</button>' : ''}
       </nav>
-      <p class="l-foot">Dijital prototip v0.1</p>
+      <img class="l-cast" src="assets/dizilis.webp" alt="Sekiz karakter, dört çağ, bir ortak sır"><p class="l-foot">Dijital prototip v0.1</p>
     </div>
   </main>`;
 }

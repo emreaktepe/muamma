@@ -15,8 +15,8 @@ import { Builder, PAL as P } from './builder.js';
 
 const LAMP = { c532: '#ffb15c', c1580: '#ffc98a', c1933: '#ffdcae', bugun: '#fff0dd' };
 const LAMP_I = 3.4;
-const DEFAULT_VIEW = { az: 0, el: 1.0, zoom: 1 };
-const INTRO_FROM = { az: -0.3, el: 1.42, zoom: 0.6 };
+const DEFAULT_VIEW = { az: 0, el: 1.15, zoom: 1.35 };
+const INTRO_FROM = { ...DEFAULT_VIEW };
 const MAX_AZ = (25 * Math.PI) / 180;
 const LIM = { az: [-MAX_AZ, MAX_AZ], el: [0.62, 1.2], zoom: [0.75, 1.9] };
 const FOV = 34;
