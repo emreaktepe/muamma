@@ -40,11 +40,13 @@ Kısa kurallar oyun içindeki **Kurallar** düğmesinde, tam tasarım [storyboar
 
 | Faz | Ne olur |
 | --- | --- |
-| Gün (×3) | Sırayla herkes 2 eylem: Yürü, Gizli İncele, Açık İncele, Sorgula, Bulmaca, Tılsımı Koru, Yetenek |
-| Gece | Bekçi Vuruşu: Gölge suikast yapar, tılsım çalar ya da sahte iz bırakır |
-| Sabah | Ceset, kayıp tılsım ya da sessiz bir gece |
-| Divan | Ruh'lar rüya gösterir, vaka suçlaması yapılır, (bir kez) sürgün oylaması |
-| Büyük Divan | IV. perdenin sonunda Delil Kutusu açılır, herkes Gölge'yi oylar |
+| Gün (×3, 7–8 kişide ×2) | Sırayla herkes 2 eylem: Yürü, Gizli İncele, Açık İncele, Sorgula, Bulmaca, Tılsımı Koru, Yetenek. Ruh'lar bir mekânı perili yapar |
+| Gece | Bekçi Vuruşu: Gölge suikast yapar, tılsım çalar ya da sahte iz bırakır (perili mekânda yapamaz) |
+| Sabah | Ceset ("ya şu ya bu" izle), kayıp tılsım ya da sessiz bir gece |
+| Divan | Ruh rüya gösterir, herkes katil ve yöntem için oy verir, Perde II–III'te gözaltı oylaması |
+| Büyük Divan | Gölge'nin gizli görevi açılır; tutmadıysa Delil Kutusu açılır, herkes Gölge'yi oylar |
+
+7–8 kişide Gölge'nin yanında bir **Suç Ortağı** vardır. Oyun bitince **Rövanş** aynı masayla yeni rollerle başlar; **Test raporunu indir** oyunun özetini .md olarak verir.
 
 ## Kod yapısı
 
@@ -73,6 +75,6 @@ docs/TASARIM_NOTLARI.md  simülasyon bulguları ve açık tasarım soruları
 
 ## Durum
 
-v0.1, oynanabilir ilk prototip. Bilinen eksikler ve sıradaki adımlar [docs/TASARIM_NOTLARI.md](docs/TASARIM_NOTLARI.md) içinde.
+v0.2: denge ve test sürümü (bulanık iz, Suç Ortağı, gizli görev, Ruh perili, gözaltı, Divan oyları, rövanş, test raporu). Bilinen eksikler ve sıradaki adımlar [docs/TASARIM_NOTLARI.md](docs/TASARIM_NOTLARI.md) içinde.
 
 Görseller ChatGPT ile üretildi. Fontlar: Cinzel, Cormorant Garamond, Courier Prime (SIL Open Font License). Vakalardaki katil, kurban ve şüpheliler kurgusaldır; tarih notları gerçek bilgilerdir.

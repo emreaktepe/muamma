@@ -54,6 +54,7 @@ export class Pieces {
       ring: new MeshStandardMaterial({ color: '#ffd24a', emissive: '#ffb300', emissiveIntensity: 0.9, roughness: 0.3 }),
       glowOpen: glow('#ff7a5a', 0.7),
       glowSafe: glow('#ffd24a', 0.8),
+      ghost: new MeshStandardMaterial({ color: '#7fe3d6', emissive: '#2bb3a3', emissiveIntensity: 0.6, transparent: true, opacity: 0.6, roughness: 0.4 }),
     };
     this.geo = {
       star: starGeometry(),
@@ -67,6 +68,7 @@ export class Pieces {
       bar: new BoxGeometry(0.22, 0.012, 0.045),
       ring: new TorusGeometry(0.2, 0.022, 8, 28),
       glow: new CircleGeometry(0.42, 28),
+      ghost: new CylinderGeometry(0.07, 0.13, 0.3, 20),
     };
   }
 
@@ -130,6 +132,8 @@ export class Pieces {
       add(this.geo.photo, m.ink, 0.015);
       add(this.geo.lens, m.gold, 0.035);
       g.rotation.y = 0.35;
+    } else if (t.kind === 'perili') {
+      add(this.geo.ghost, m.ghost, 0.15);
     } else if (t.kind === 'body') {
       add(this.geo.body, m.coral, 0.018);
       const a = add(this.geo.bar, m.cream, 0.04); a.rotation.y = Math.PI / 4;
@@ -280,3 +284,4 @@ export class Pieces {
     this.glowTex.dispose();
   }
 }
+

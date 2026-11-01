@@ -15,7 +15,7 @@ function star(x, y, r, fill, stroke = 'none') {
   return `<polygon points="${pts.join(' ')}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
 }
 
-export function boardSVG(s, { reach = {}, currentId = null, showRuh = true } = {}) {
+export function boardSVG(s, { reach = {}, currentId = null, showRuh = true, tahta = null, perili = null } = {}) {
   const out = [];
   out.push(`<svg class="board" viewBox="0 0 840 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="İstanbul oyun tahtası">`);
   out.push(`<defs>
@@ -23,10 +23,11 @@ export function boardSVG(s, { reach = {}, currentId = null, showRuh = true } = {
     <radialGradient id="glow"><stop offset="0" stop-color="${C.gold}" stop-opacity=".55"/><stop offset="1" stop-color="${C.gold}" stop-opacity="0"/></radialGradient>
   </defs>`);
   out.push(`<rect width="840" height="440" fill="${C.navy}"/><rect width="840" height="440" fill="url(#waves)"/>`);
+  if (tahta) out.push(`<image href="${tahta}" width="840" height="440" preserveAspectRatio="xMidYMid slice" opacity=".9"/>`);
   const land = `fill="${C.parch}" stroke="#B9A57A" stroke-width="2"`;
-  out.push(`<path d="M0 196 L300 184 L360 200 L432 214 L500 252 L512 300 L470 352 L398 394 L300 410 L170 414 L0 404 Z" ${land}/>`);
-  out.push(`<path d="M0 0 L590 0 L596 30 L560 90 L528 160 L470 178 L400 168 L320 166 L200 170 L0 174 Z" ${land}/>`);
-  out.push(`<path d="M840 0 L650 0 L640 60 L668 140 L650 220 L660 300 L640 380 L700 440 L840 440 Z" ${land}/>`);
+  if (!tahta) out.push(`<path d="M0 196 L300 184 L360 200 L432 214 L500 252 L512 300 L470 352 L398 394 L300 410 L170 414 L0 404 Z" ${land}/>`);
+  if (!tahta) out.push(`<path d="M0 0 L590 0 L596 30 L560 90 L528 160 L470 178 L400 168 L320 166 L200 170 L0 174 Z" ${land}/>`);
+  if (!tahta) out.push(`<path d="M840 0 L650 0 L640 60 L668 140 L650 220 L660 300 L640 380 L700 440 L840 440 Z" ${land}/>`);
   for (const [x, y, t, r] of [[150, 186, 'HALİÇ', 0], [612, 160, 'BOĞAZ', -78], [560, 424, 'MARMARA', 0]]) {
     out.push(`<text x="${x}" y="${y}" class="water" text-anchor="middle" transform="rotate(${r} ${x} ${y})">${t}</text>`);
   }
@@ -61,12 +62,17 @@ export function boardSVG(s, { reach = {}, currentId = null, showRuh = true } = {
     // jetonlar
     let ty = L.y - 30;
     if (s.guards[id] !== undefined) { out.push(`<g class="tok"><rect x="${L.x + 12}" y="${ty}" width="14" height="16" rx="3" fill="${C.turq}" stroke="${C.parch}"/><title>Nöbet</title></g>`); }
+    if (s.haunted && s.haunted[id] !== undefined) {
+      out.push(perili
+        ? `<g class="tok perili"><image href="${perili}" x="${L.x - 34}" y="${L.y - 4}" width="22" height="22"/><title>Perili: bu gece burada suikast, hırsızlık ve sahte iz olmaz</title></g>`
+        : `<g class="tok perili"><path d="M${L.x - 32} ${L.y + 16} v-12 a8 8 0 0 1 16 0 v12 l-4 -3 -4 3 -4 -3 z" fill="${C.turq}" fill-opacity=".85" stroke="${C.parch}"/><circle cx="${L.x - 27}" cy="${L.y + 4}" r="1.6" fill="${C.ink}"/><circle cx="${L.x - 21}" cy="${L.y + 4}" r="1.6" fill="${C.ink}"/><title>Perili: bu gece burada suikast, hırsızlık ve sahte iz olmaz</title></g>`);
+    }
     if (s.photos[id] !== undefined) { out.push(`<g class="tok"><rect x="${L.x - 26}" y="${ty}" width="16" height="12" rx="2" fill="${C.ink}" stroke="${C.gold}"/><circle cx="${L.x - 18}" cy="${ty + 6}" r="3" fill="${C.gold}"/><title>Fotoğraf</title></g>`); }
   }
   // cesetler
   for (const b of s.bodies) {
     const L = LOCATIONS[b.loc];
-    out.push(`<g class="tok"><path d="M${L.x - 22} ${L.y + 8} l10 10 m0 -10 l-10 10" stroke="${C.coral}" stroke-width="3.5" stroke-linecap="round"/><title>Ceset${b.examined ? ` (iz: ${esc(b.iz.val)})` : ' — incelenmedi'}</title></g>`);
+    out.push(`<g class="tok"><path d="M${L.x - 22} ${L.y + 8} l10 10 m0 -10 l-10 10" stroke="${C.coral}" stroke-width="3.5" stroke-linecap="round"/><title>Ceset${b.examined ? ` (iz: ${esc(b.iz.shown ? `ya ${b.iz.shown[0]} ya ${b.iz.shown[1]}` : b.iz.val)})` : ' — incelenmedi'}</title></g>`);
   }
   // piyonlar
   const byLoc = {};

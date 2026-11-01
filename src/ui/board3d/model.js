@@ -85,6 +85,7 @@ export function snapshot(s, { reach = {}, currentId = null, showRuh = true } = {
       tokens.push({ key: `tilsim:${id}`, kind: 'tilsim', loc: id, state, x: L.x, y: L.y, level: 0 });
     }
     if (s.guards[id] !== undefined) tokens.push({ key: `guard:${id}`, kind: 'guard', loc: id, state: '', x: L.x + 19, y: L.y - 22, level: 0 });
+    if (s.haunted && s.haunted[id] !== undefined) tokens.push({ key: `perili:${id}`, kind: 'perili', loc: id, state: '', x: L.x - 26, y: L.y + 2, level: 0 });
     if (s.photos[id] !== undefined) tokens.push({ key: `photo:${id}`, kind: 'photo', loc: id, state: '', x: L.x - 19, y: L.y - 22, level: 0 });
   }
   const bodyCount = {};
@@ -108,6 +109,7 @@ export function a11yHTML(s, opts = {}) {
       tilsim: `tılsım ${TILSIMLAR[id]}${t.state === 'stolen' ? ' (çalındı)' : t.state === 'safe' ? ' (korunuyor)' : ''}`,
       guard: 'nöbet jetonu',
       photo: 'fotoğraf jetonu',
+      perili: 'perili (bu gece suikast, hırsızlık ve sahte iz yok)',
       body: t.state === 'examined' ? 'ceset (incelendi)' : 'ceset (incelenmedi)',
     }[t.kind]));
     if (!here.length && !tok.length) continue;
@@ -116,5 +118,5 @@ export function a11yHTML(s, opts = {}) {
   const reachBtns = snap.reach.filter((id) => isOpen(s, id))
     .map((id) => `<button class="btn small node reach" data-act="node" data-loc="${id}">${esc(locName(s, id))}</button>`).join('');
   return `<ul class="sr-only" aria-label="Tahtadaki durum">${items.join('')}</ul>
-    ${reachBtns ? `<div class="reach-list"><span>Gidilebilir:</span>${reachBtns}</div>` : ''}`;
+    ${reachBtns ? `<div class="reach-list"><span>${esc(opts.reachLabel || 'Gidilebilir')}:</span>${reachBtns}</div>` : ''}`;
 }
