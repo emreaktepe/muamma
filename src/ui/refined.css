@@ -10,3 +10,9 @@ body{background:#0b1421}button,input,select{font-family:system-ui,sans-serif;fon
 @media(max-width:760px){.charcard{grid-template-columns:110px minmax(0,1fr)}}
 .named-card .card-caption{bottom:auto;top:82.5%;height:14%}.card-description{font:12px/1.5 system-ui,sans-serif!important;color:#eee4cf;margin:10px 0 0!important}.setup .row2 label:nth-child(2){flex-basis:200px}.setup .panel-card{align-self:start}
 .card-art{position:relative}.card-art .card-caption{top:82.5%;bottom:auto;height:14%}
+/* Landing contrast and aligned setup columns. */
+.land .l-glow{background:radial-gradient(ellipse at 50% 40%,rgba(3,9,18,.88) 0%,rgba(3,9,18,.68) 32%,rgba(3,9,18,.18) 70%),linear-gradient(0deg,rgba(3,9,18,.9),transparent 70%)}
+.land .l-logo{background:none;color:#f1d78a;-webkit-text-fill-color:#f1d78a;filter:none;text-shadow:0 3px 3px #000,0 8px 28px #000,0 0 60px #030912;letter-spacing:.12em}
+.land .l-title,.land .l-kicker,.land .l-tag{text-shadow:0 2px 5px #000,0 0 18px #000;color:#f1e6ca}.land .l-cast{width:min(780px,88vw);max-height:32vh;margin-top:28px;border-radius:0;filter:drop-shadow(0 12px 16px #0009)}
+.setup-art{align-self:stretch;display:flex;flex-direction:column}.setup-art img{margin-bottom:0}.setup-art>p:last-child{margin:18px 0 0}.setup .panel-card{align-self:stretch;display:flex;flex-direction:column}.setup .panel-card>.btns{margin-top:auto;padding-top:20px}.setup .showcase{margin-top:8px}
+@media(max-width:760px){.setup .panel-card>.btns{margin-top:16px;padding-top:0}.land .l-cast{max-height:26vh;width:94vw}.land .l-logo{font-size:clamp(42px,12vw,70px)}}
