@@ -10,9 +10,10 @@ import './ui/flip.css';
 import {
   createGame, startGame, act, era, caseOf, player, activePlayers, charOf, reachable, availableActions,
   currentPlayer, nightOptions, locName, tilsimCount, puzzleAt, golgeler, isActive, RULES, publicEvidence,
-  consistentWith, voteTally, bodyAt, abilityUsable, paragraphAt,
+  consistentWith, voteTally, bodyAt, abilityUsable, paragraphAt, eraDays, hauntOptions, isEvil, isDetained,
+  missionProgress,
 } from './game/engine.js';
-import { botTurn, botAccuse } from './game/ai.js';
+import { botTurn } from './game/ai.js';
 import { stepAuto } from './game/autoplay.js';
 import { CHARACTERS, CHAR_BY_ID, IZ_CATEGORIES } from './game/data/characters.js';
 import { TILSIMLAR, LOCATIONS } from './game/data/locations.js';
@@ -65,6 +66,21 @@ const multiHuman = () => humans().length > 1;
 const spectator = () => S && humans().length === 0;
 const fid = (...parts) => [S?.seed, ...parts].join(':');
 const avatar = (p, cls = '') => `<img class="av ${cls}" src="assets/avatar_${p.charId}.webp" alt="">`;
+// v2 görselleri: src/assets/v2 içinde ne varsa (yoksa null döner, yedek görsel kullanılır)
+const V2 = import.meta.glob('./assets/v2/*.{webp,png,jpg}', { eager: true, query: '?url', import: 'default' });
+const v2 = (name) => {
+  const k = Object.keys(V2).find((f) => f.split('/').pop().replace(/\.(webp|png|jpg)$/, '') === name);
+  return k ? V2[k] : null;
+};
+const v2img = (name, cls = '', fallback = null) => {
+  const src = v2(name) || fallback;
+  return src ? `<img class="${cls}" src="${src}" alt="">` : '';
+};
+const izIcon = (cat, val) => {
+  const i = IZ_CATEGORIES[cat].values.indexOf(val);
+  return v2img(`iz_${cat}_${i}`, 'izi');
+};
+const ROLE_NAME = { golge: 'GÖLGE', ortak: 'SUÇ ORTAĞI', muhafiz: 'Muhafız' };
 const tilsimIcons = () => Object.keys(TILSIMLAR).map((l) => `<span class="ts ${S.tilsim[l] ? 'on' : 'off'}" title="${esc(TILSIMLAR[l])}">✦</span>`).join('');
 
 function dispatch(a) {
@@ -109,7 +125,7 @@ function setupView() {
     </div>`).join('');
   return `<div class="setup">
     <div class="hero"><img src="assets/logo_a.webp" alt="MUAMMA logosu"><div>
-      <h1>İstanbul'un Yedi Tılsımı</h1><p class="sub">Dijital prototip v0.1</p>
+      <h1>İstanbul'un Yedi Tılsımı</h1><p class="sub">Dijital prototip v0.2</p>
       <p>Dört çağ, dört cinayet ve aranızda gizlenen bir Gölge. Bu prototip kuralları denemek, dengeyi ölçmek ve oyunu birlikte anlamak için.</p>
     </div></div>
     <div class="panel-card">
@@ -154,16 +170,21 @@ function roleView() {
       <p>Cihazı ${esc(p.name)}'e ver. Rol kartını yalnız o görsün.</p>
       <button class="btn gold" data-act="role-show">Rolümü göster</button></div></div>`;
   }
-  const c = charOf(p);
-  const partner = p.role === 'golge' ? golgeler(S).filter((g) => g.id !== p.id) : [];
+  const team = S.players.filter((q) => q.id !== p.id && isEvil(q) && isEvil(p));
+  const roleImg = p.role === 'golge' ? 'assets/rol_golge.webp' : p.role === 'ortak' ? (v2('rol_ortak') || 'assets/rol_golge.webp') : 'assets/rol_muhafiz.webp';
+  const texts = {
+    golge: 'Amacın: Büyük Divan\'dan sıyrılmak ya da gizli görevini tamamlamak. Gece yakınındaki bir Muhafız\'ı öldürebilir, tılsım çalabilir ya da sahte iz bırakabilirsin. Gizli İncele\'den sonra yalan söyleyebilirsin.',
+    ortak: 'Gölge\'nin Suç Ortağısın. Gece hamlen yok ama Gölge\'yi tanıyorsun: yalan söyle, şüpheyi başkalarına çevir, Divan\'da Gölge\'yi koru. Gölge kazanırsa sen de kazanırsın.',
+    muhafiz: 'Amacın: dört vakayı çözmek, tılsımları korumak ve Büyük Divan\'da Gölge\'yi bulmak. Açık İnceleme yalanları çürütür; iz kartları katili daraltır.',
+  };
+  const titles = { golge: 'Sen GÖLGE\'sin', ortak: 'Sen SUÇ ORTAĞI\'sın', muhafiz: 'Sen bir MUHAFIZ\'sın' };
   return `<div class="reveal">
-    ${flipCard({ id: fid('rol', p.id), cls: 'card-flip', slow: true, toggle: true, label: 'Rol kartını çevir', front: `<img class="card-img" src="assets/rol_${p.role === 'golge' ? 'golge' : 'muhafiz'}.webp" alt="">` })}
+    ${flipCard({ id: fid('rol', p.id), cls: 'card-flip', slow: true, toggle: true, label: 'Rol kartını çevir', front: `<img class="card-img" src="${roleImg}" alt="">` })}
     <div class="reveal-text">
-      <h2>${p.role === 'golge' ? 'Sen GÖLGE\'sin' : 'Sen bir MUHAFIZ\'sın'}</h2>
-      <p>${p.role === 'golge'
-        ? 'Amacın: yakalanmadan tılsımları 2\'ye düşürmek ya da Büyük Divan\'dan sıyrılmak. Gece bir oyuncuyu öldürebilir, tılsım çalabilir ya da sahte iz bırakabilirsin. Gizli İncele\'den sonra yalan söyleyebilirsin.'
-        : 'Amacın: dört vakayı çözmek, tılsımları korumak ve aranızdaki Gölge\'yi bulmak. Açık İnceleme yalanları çürütür; iz kartları katili daraltır.'}</p>
-      ${partner.length ? `<p class="warn">Ortak Gölge: <b>${partner.map((x) => esc(x.name)).join(', ')}</b></p>` : ''}
+      <h2>${titles[p.role]}</h2>
+      <p>${texts[p.role]}</p>
+      ${team.length ? `<p class="warn">${p.role === 'golge' ? 'Suç Ortağın' : 'Gölge'}: <b>${team.map((x) => esc(x.name)).join(', ')}</b></p>` : ''}
+      ${p.role === 'golge' && S.mission ? missionCard() : ''}
       ${charCard(p)}
       <button class="btn gold" data-act="role-hide">Gördüm, gizle</button>
     </div></div>`;
@@ -181,6 +202,13 @@ function charCard(p, ctx = 'rol') {
     <div class="chips">${izChips(c.iz)}</div></div></div>`;
 }
 
+function missionCard() {
+  const m = S.mission;
+  const mp = missionProgress(S);
+  return `<div class="mission">${v2img('gorev_' + m.id, 'mission-img')}<div><h4>Gizli görev: ${esc(m.title)}</h4><p>${esc(m.text)}</p>
+    <p class="hint">Görev Büyük Divan başında açılır; tamamsa oylama yapılmadan kazanırsın.${mp ? ` Şu an: ${mp.have}/${mp.need}.` : ''}</p></div></div>`;
+}
+
 const PROLOG = 'Bugün. Yerebatan Sarnıcı\'nda, ters duran Medusa başının dibinde bir restorasyon uzmanı ölü bulundu. Elinde kırık bir pirinç usturlap, taşın üzerinde eski harflerle yazılmış bir muamma var. Siz, yüzyıllardır İstanbul\'un Yedi Tılsımı\'nı koruyan gizli Muvakkithane Cemiyeti\'nin üyelerisiniz. Usturlabı çevirdiğinizde şehir çağlar arasında kayacak. Ama katil dışarıda değil: aranızdaki Gölge.';
 
 function storyView(img, title, text, btn, actName, extra = '') {
@@ -196,7 +224,7 @@ function eraIntroView() {
     ? '<p class="hint">Bu perdenin şüphelileri masadaki oyunculardır. Kazı alanları (Yenikapı, Yerebatan, Galata, Kız Kulesi) Gölge\'nin izlerini "ya şu ya bu" diye bulanık gösterir.</p>'
     : `<div class="suspects">${c.suspects.map((x) => `<div><b>${esc(x.name)}</b><span>${esc(x.desc)}</span></div>`).join('')}</div>`;
   return storyView(`assets/${e.image.split('/').pop()}`, `${esc(e.perde)} · ${esc(e.year)} · ${esc(c.title)}`, esc(c.intro),
-    'Günü başlat', 'start-days', `${sus}<p class="hint">Bu çağda ulaşım: ${esc(e.transport)}. ${e.days} gün ve ${e.days} gece, ardından ${c.dynamic ? 'Büyük Divan' : 'Divan'}.</p>`);
+    'Günü başlat', 'start-days', `${sus}<p class="hint">Bu çağda ulaşım: ${esc(e.transport)}. ${eraDays(S)} gün ve ${eraDays(S)} gece, ardından ${c.dynamic ? 'Büyük Divan' : 'Divan'}.</p>`);
 }
 
 function headerView() {
@@ -204,9 +232,9 @@ function headerView() {
   return `<header class="topbar" style="--era:${e.color}">
     <div class="brand"><img src="icons/icon-32.png" alt="">MUAMMA</div>
     <div class="era"><b>${esc(e.perde)}</b> · ${esc(e.year)} · ${esc(caseOf(S).title)}</div>
-    <div class="day">${S.phase === 'divan' ? 'Divan' : S.phase === 'night' ? `Gece ${S.day}` : `Gün ${S.day}/${e.days}`}</div>
+    <div class="day">${S.phase === 'divan' ? 'Divan' : S.phase === 'night' ? `Gece ${S.day}` : `Gün ${S.day}/${eraDays(S)}`}</div>
     <div class="tils" title="Tılsımlar: ${tilsimCount(S)}/7 (2'ye düşerse Gölge kazanır)">${tilsimIcons()}</div>
-    <div class="meta">Çözülen vaka: <b>${S.solvedCases}</b> · Sürgün hakkı: <b>${Math.max(0, RULES.EXILES_BEFORE_FINAL - S.exilesUsed)}</b></div>
+    <div class="meta">Çözülen vaka: <b>${S.solvedCases}</b> · ${RULES.EXILE_MODE === 'gozalti' ? 'Gözaltı' : 'Sürgün'} hakkı: <b>${Math.max(0, RULES.EXILES_BEFORE_FINAL - S.exilesUsed)}</b></div>
     <div class="tools">
       <select data-in="speed" aria-label="Bot hızı">${Object.keys(DELAYS).map((k) => `<option value="${k}" ${ui.speed === k ? 'selected' : ''}>${{ yavas: 'Yavaş', normal: 'Normal', hizli: 'Hızlı' }[k]}</option>`).join('')}</select>
       ${CAN3D ? `<button class="btn small ghost view-toggle" data-act="view-toggle" aria-pressed="${ui.view === 'basit'}" title="3D masa görünümü ile düz tahta arasında geçiş">${ui.view === '3d' ? 'Basit görünüm' : '3D görünüm'}</button>` : ''}
@@ -219,7 +247,8 @@ function headerView() {
 function playerList() {
   const cur = currentPlayer(S);
   return `<div class="plist">${S.players.map((p) => {
-    const st = p.status === 'ruh' ? (p.exiled ? 'Ruh (sürgün)' : 'Ruh') : p.status === 'surgun' ? 'Sürgün: Gölge' : p.status === 'ifsa' ? 'İfşa: Gölge' : `${p.actionsLeft > 0 && S.phase === 'day' ? p.actionsLeft + ' eylem' : ''}`;
+    const st = p.status === 'ruh' ? (p.exiled ? 'Ruh (sürgün)' : 'Ruh') : p.status === 'surgun' ? `Sürgün: ${ROLE_NAME[p.role]}` : p.status === 'ifsa' ? 'İfşa: Gölge'
+      : isDetained(S, p) ? 'Gözaltında' : `${p.actionsLeft > 0 && S.phase === 'day' ? p.actionsLeft + ' eylem' : ''}`;
     return `<div class="pl ${cur?.id === p.id ? 'cur' : ''} ${isActive(p) ? '' : 'out'}">${avatar(p)}<div><b>${esc(p.name)}</b>${p.isBot ? ' <i>bot</i>' : ''}<br><span>${esc(charOf(p).name)} · ${esc(locName(S, p.loc))}</span></div><em>${esc(st)}</em></div>`;
   }).join('')}</div>`;
 }
@@ -227,7 +256,12 @@ function playerList() {
 function actionPanel() {
   const p = currentPlayer(S);
   if (S.phase !== 'day' || !p) return '';
-  if (p.isBot) return `<div class="actions"><p class="thinking">${avatar(p)} ${esc(p.name)} düşünüyor…</p></div>`;
+  if (p.isBot) return `<div class="actions"><p class="thinking">${avatar(p)} ${esc(p.name)}${p.status === 'ruh' ? ' (Ruh)' : ''} düşünüyor…</p></div>`;
+  if (p.status === 'ruh') {
+    return `<div class="actions ruh-panel"><div class="who">${avatar(p, 'md')}<div><h3>${esc(p.name)} · Ruh</h3>
+      <p>Haritada <b>perili</b> yapacağın mekâna tıkla. O gece orada suikast, tılsım hırsızlığı ve sahte iz olmaz.</p></div></div>
+      <div class="abtns"><button class="btn ghost" data-act="end-turn">Pas geç</button></div></div>`;
+  }
   const av = availableActions(S, p);
   const c = charOf(p);
   const reach = Object.keys(reachable(S, p)).length;
@@ -250,13 +284,13 @@ function actionPanel() {
   </div>`;
 }
 
-const TYPE_LABEL = { acik: 'Açık', iddia: 'İddia', tanik: 'Tanık', bulmaca: 'Bulmaca', iz: 'İz', olay: 'Olay', ruh: 'Ruh', divan: 'Divan', curutuldu: 'Çürütüldü', yetenek: 'Yetenek', koru: 'Nöbet', hareket: 'Hareket', son: 'Son' };
+const TYPE_LABEL = { acik: 'Açık', iddia: 'İddia', tanik: 'Tanık', bulmaca: 'Bulmaca', iz: 'İz', olay: 'Olay', ruh: 'Ruh', perili: 'Perili', divan: 'Divan', curutuldu: 'Çürütüldü', yetenek: 'Yetenek', koru: 'Nöbet', hareket: 'Hareket', son: 'Son' };
 
 function defterView() {
   const filter = ui.tab;
   const keep = {
     defter: (e) => e.type !== 'hareket',
-    ipucu: (e) => ['acik', 'iddia', 'bulmaca', 'iz', 'ruh', 'curutuldu'].includes(e.type),
+    ipucu: (e) => ['acik', 'iddia', 'bulmaca', 'iz', 'ruh', 'curutuldu', 'perili'].includes(e.type),
     hepsi: () => true,
   }[filter] || (() => true);
   const items = S.defter.filter(keep).slice(-120).reverse();
@@ -280,7 +314,7 @@ function caseView() {
   }
   return `<div class="case">
     <p class="hint">Yalnız <b>doğrulanmış</b> bilgiler (Açık İnceleme ve bulmaca) sayılır. İddialar defterde.</p>
-    ${c.suspects.map((x, i) => flipCard({ id: fid('sus', yr, x.id), cls: 'sus-flip', delay: i * 120, front: `<div class="sus ${alibi.has(x.id) ? 'alibi' : ''}"><b>${esc(x.name)}</b> ${alibi.has(x.id) ? '<span class="chip">Aklandı</span>' : ''}${points[x.id] ? `<span class="chip warn">${points[x.id]} işaret</span>` : ''}<p>${esc(x.desc)}</p></div>` })).join('')}
+    ${c.suspects.map((x, i) => flipCard({ id: fid('sus', yr, x.id), cls: 'sus-flip', delay: i * 120, front: `<div class="sus ${alibi.has(x.id) ? 'alibi' : ''}">${v2img('supheli_' + x.id, 'sus-av')}<b>${esc(x.name)}</b> ${alibi.has(x.id) ? '<span class="chip">Aklandı</span>' : ''}${points[x.id] ? `<span class="chip warn">${points[x.id]} işaret</span>` : ''}<p>${esc(x.desc)}</p></div>` })).join('')}
     <p class="hint">Yöntem seçenekleri: ${c.methods.map((m) => esc(m.label)).join(' · ')}</p>
   </div>`;
 }
@@ -288,9 +322,14 @@ function caseView() {
 function suspectTable() {
   const ev = publicEvidence(S);
   const cats = Object.keys(IZ_CATEGORIES);
-  const evText = ev.map((e) => e.kind === 'must'
-    ? `${IZ_CATEGORIES[e.cat].label} = ${e.val}`
-    : e.items.map((x) => `${IZ_CATEGORIES[x.cat].label} ${x.val}`).join(' ya da ')).map((t) => flipCard({ id: fid('iz', t), tag: 'span', front: `<span class="chip">${esc(t)}</span>` })).join('');
+  const SRC = { iz: 'Ceset', ruh: 'Rüya', delil: 'Delil', kazi: 'Kazı' };
+  const evText = ev.map((e) => {
+    const key = e.kind === 'must' ? `${e.cat}=${e.val}` : e.items.map((x) => `${x.cat}=${x.val}`).join('|');
+    const body = e.kind === 'must'
+      ? `${izIcon(e.cat, e.val)}${esc(IZ_CATEGORIES[e.cat].label)} = ${esc(e.val)}`
+      : e.items.map((x) => `${izIcon(x.cat, x.val)}${esc(IZ_CATEGORIES[x.cat].label)} ${esc(x.val)}`).join(' ya da ');
+    return flipCard({ id: fid('iz', e.src || '', key), tag: 'span', front: `<span class="chip"><i>${SRC[e.src] || ''}</i> ${body}</span>` });
+  }).join('');
   return `<div class="case">
     <p class="hint">Katilin izleri (kamuya açık): ${evText || 'henüz yok'}</p>
     <table class="iz"><thead><tr><th>Oyuncu</th>${cats.map((c) => `<th>${IZ_CATEGORIES[c].label}</th>`).join('')}<th>Uyum</th></tr></thead><tbody>
@@ -320,7 +359,7 @@ function gameView() {
   return `${headerView()}
     <main class="game">
       <section class="boardwrap">${boardHTML(reach, p?.id)}
-        <div class="legend"><span><i class="lg-star"></i>Tılsım</span><span><i class="lg-x"></i>Ceset</span><span><i class="lg-sea"></i>Deniz yolu (Yürü'nün tamamı)</span>${era(S).id === 'bugun' ? '<span><i class="lg-rail"></i>Marmaray</span>' : ''}</div>
+        <div class="legend"><span><i class="lg-star"></i>Tılsım</span><span><i class="lg-x"></i>Ceset</span><span><i class="lg-sea"></i>Deniz yolu (Yürü'nün tamamı)</span><span><i class="lg-perili"></i>Perili</span>${era(S).id === 'bugun' ? '<span><i class="lg-rail"></i>Marmaray</span>' : ''}</div>
         ${ui.error ? `<p class="error">${esc(ui.error)}</p>` : ''}
       </section>
       ${sidePanel()}
@@ -351,6 +390,7 @@ function claimView(p) {
   if (gateNeeded(key)) return gateView(key, p, 'Gizli İnceleme sonucu.');
   const pd = S.pending;
   return `<h2>Gizli İnceleme · ${esc(locName(S, pd.loc))}</h2>
+    ${v2img('mekan_' + pd.loc, 'loc-img', pd.loc === 'galata' ? 'assets/mekan_galata.webp' : null)}
     ${flipCard({ id: fid('claim', S.defter.length, p.id), cls: 'paper-flip', front: `<div class="paper">${esc(pd.text)}</div>` })}
     <p class="hint">Masaya ne söyleyeceksin? Defterde "iddia" olarak görünür. Biri burayı Açık İnceleme ile okursa yalanın ortaya çıkar.</p>
     <div class="claims">
@@ -364,6 +404,7 @@ function puzzleModal() {
   const p = currentPlayer(S);
   const puz = puzzleAt(S, p.loc);
   return `<h2>Bulmaca · ${esc(puz.title)}</h2>
+    ${v2img(`bulmaca_${era(S).year === 'Bugün' ? 'bugun' : era(S).year}_${p.loc}`, 'loc-img')}
     ${flipCard({ id: fid('bulmaca', puz.id ?? puz.title, S.eraIndex), cls: 'paper-flip', front: `<div class="paper">${esc(puz.text)}</div>` })}
     ${p.charId === 'zeynep' ? `<p class="hint">Hat Bilgisi ipucu: ${esc(puz.hint)}</p>` : ''}
     <form data-form="solve" class="solve"><input name="answer" autocomplete="off" placeholder="Cevabın" aria-label="Cevap" autofocus>
@@ -385,21 +426,24 @@ function notesModal() {
   if (gateNeeded(key)) return gateView(key, p, 'Gizli notların.');
   const notes = S.private[p.id] || [];
   return `<h2>${esc(p.name)} · gizli notlar</h2>
-    <p>Rolün: <b>${p.role === 'golge' ? 'GÖLGE' : 'Muhafız'}</b>${p.role === 'golge' && golgeler(S).length > 1 ? ' · Ortak: ' + golgeler(S).filter((g) => g.id !== p.id).map((g) => esc(g.name)).join(', ') : ''}</p>
+    <p>Rolün: <b>${ROLE_NAME[p.role]}</b>${isEvil(p) ? ' · ' + (p.role === 'golge' ? 'Suç Ortağın' : 'Gölge') + ': ' + (S.players.filter((q) => q.id !== p.id && isEvil(q)).map((g) => esc(g.name)).join(', ') || 'yok') : ''}</p>
+    ${p.role === 'golge' && S.mission ? missionCard() : ''}
     ${charCard(p, 'notlar')}
     <div class="defter">${notes.map((n) => `<div class="entry"><span class="when">${esc(n.era)} · G${n.day}</span><p>${esc(n.text)}</p></div>`).join('') || '<p class="hint">Henüz gizli not yok.</p>'}</div>
     <button class="btn gold" data-act="close">Kapat</button>`;
 }
 
 function helpModal() {
-  return `<h2>Kısa kurallar</h2>
+  const ex = RULES.EXILE_MODE === 'gozalti';
+  return `<h2>Kısa kurallar · v0.2</h2>
   <div class="rules">
-  <p><b>Amaç.</b> Muhafızlar dört vakayı çözmeye, tılsımları korumaya ve aralarındaki Gölge'yi bulmaya çalışır. Gölge tılsımları ${RULES.TILSIM_LOSE_AT}'ye düşürmeye ya da Büyük Divan'dan sıyrılmaya çalışır.</p>
-  <p><b>Gün.</b> Sırası gelen oyuncu ${RULES.ACTIONS_PER_DAY} eylem yapar: Yürü (2 adım; deniz geçişi yürüyüşün tamamı), Gizli İncele (1, masaya istediğini söylersin), Açık İncele (2, herkes okur, yalanları çürütür), Sorgula (tanık + tarih notu), Bulmaca, Tılsımı Koru, Yetenek.</p>
-  <p><b>Gece (Bekçi Vuruşu).</b> Gölge tek hamle yapar: kendine yakın (aynı ya da komşu mekân) bir Muhafız'ı öldürür, yakındaki korumasız bir tılsımı çalar ya da bir mekâna sahte iz bırakır. Çağ başına en fazla ${RULES.KILLS_PER_ERA} suikast; ${RULES.MIN_MUHAFIZ_ALIVE} Muhafız kaldığında suikast yapılamaz.</p>
-  <p><b>Ceset ve iz.</b> Cesedi inceleyen, katilin dört özelliğinden birini görür (ayakkabı, koku, nesne, renk). Her özellik iki karakterde vardır. Ölen oyuncu Ruh olur; Divan'da en az bir simgesi katile uyan bir rüya gösterir.</p>
-  <p><b>Divan.</b> Her çağın sonunda vaka suçlaması yapılır: doğruysa bir tılsım geri gelir ve finalde 1 Delil pulu açılır; yanlışsa bir tılsım kaybolur. Büyük Divan'dan önce toplam ${RULES.EXILES_BEFORE_FINAL} sürgün hakkınız var: masum birini sürmek bir tılsıma mal olur.</p>
-  <p><b>Büyük Divan.</b> IV. perdenin sonunda Delil Kutusu'ndan çözülen vaka sayısı kadar pul açılır, sonra herkes Gölge'yi oylar.</p>
+  <p><b>Amaç.</b> Muhafızlar dört vakayı çözmeye, tılsımları korumaya ve Büyük Divan'da Gölge'yi bulmaya çalışır. Gölge yakalanmadan oyunu bitirmeye ya da gizli görevini tamamlamaya çalışır. Tılsımlar ${RULES.TILSIM_LOSE_AT}'ye düşerse Gölge hemen kazanır. 7–8 kişide Gölge'nin bir Suç Ortağı vardır.</p>
+  <p><b>Gün.</b> Sırası gelen oyuncu ${RULES.ACTIONS_PER_DAY} eylem yapar: Yürü (2 adım; deniz geçişi yürüyüşün tamamı), Gizli İncele (1, masaya istediğini söylersin), Açık İncele (2, herkes okur, yalanları çürütür), Sorgula (tanık + tarih notu), Bulmaca, Tılsımı Koru, Yetenek. 7–8 kişide her perde bir gün kısadır.</p>
+  <p><b>Ruh.</b> Ölen oyuncu oyundan çıkmaz: her gün bir mekânı <b>perili</b> yapar; o gece orada suikast, tılsım hırsızlığı ve sahte iz olmaz. Öldükten sonraki ilk Divan'da katiline en az bir simgesi uyan bir rüya gösterir.</p>
+  <p><b>Gece (Bekçi Vuruşu).</b> Gölge tek hamle yapar: kendine yakın (aynı ya da komşu mekân) bir Muhafız'ı öldürür, yakındaki korumasız bir tılsımı çalar ya da sahte iz bırakır (Perde IV'te kazı alanlarına da). Perde başına en fazla ${RULES.KILLS_PER_ERA} suikast; ${RULES.MIN_MUHAFIZ_ALIVE} Muhafız kaldığında suikast yapılamaz.</p>
+  <p><b>İz.</b> Ceset, katilin bir özelliğini "ya şu ya bu" diye bulanık gösterir; her özellik iki karakterde vardır.</p>
+  <p><b>Divan.</b> Her perde sonunda herkes katil ve yöntem için oy verir. Katil doğruysa vaka çözülür; yöntem de doğruysa kayıp bir tılsım geri gelir. Yanlış suçlama bir tılsıma mal olur. ${ex ? `Perde II ve III'te bir kişiyi <b>gözaltına</b> alabilirsiniz: o oyuncu bir sonraki perde eylem yapamaz (Gölge'yse gece hamlesi de yapamaz), rolü gizli kalır.` : 'Sürgün oylamasıyla bir kişi oyundan çıkarılabilir.'}</p>
+  <p><b>Büyük Divan.</b> Gölge'nin gizli görevi açılır; tamamsa Gölge kazanır. Değilse her ${RULES.DELIL_PER_CASES} çözülen vaka için Delil Kutusu'ndan bir pul ("ya şu ya bu") açılır ve herkes Gölge'yi oylar.</p>
   </div><button class="btn gold" data-act="close">Kapat</button>`;
 }
 
@@ -407,7 +451,7 @@ function nightView() {
   const pd = S.pending;
   const gHumans = golgeler(S).filter((g) => isActive(g) && !g.isBot);
   if (!gHumans.length || pd?.type !== 'night' && pd?.type !== 'iz-choice') {
-    return `<div class="overlay night"><div class="bekci"><h2>Gece · Bekçi Vuruşu</h2><p>Herkes gözlerini kapatsın ve masaya vursun…</p><div class="knock"><span></span><span></span><span></span></div></div></div>`;
+    return `<div class="overlay night" ${v2('gece') ? `style="background-image:linear-gradient(rgba(2,5,12,.55),rgba(2,5,12,.75)),url(${v2('gece')})"` : ''}><div class="bekci"><h2>Gece · Bekçi Vuruşu</h2><p>Herkes gözlerini kapatsın ve masaya vursun…</p><div class="knock"><span></span><span></span><span></span></div></div></div>`;
   }
   // İnsan Gölge varsa: bütün insan oyunculara sırayla gizli ekran (kim karar veriyor anlaşılmasın)
   if (!ui.night) ui.night = { queue: activePlayers(S).filter((p) => !p.isBot).map((p) => p.id), pos: 0, shown: false, decision: null };
@@ -420,7 +464,9 @@ function nightView() {
   }
   const decider = gHumans[0];
   let body;
-  if (p.role !== 'golge') {
+  if (p.role === 'ortak') {
+    body = `<h3>Suç Ortağı</h3><p>Gölge bu gecenin hamlesine karar veriyor. Sen bekle; yarın şüpheyi başkalarına çevir.</p><button class="btn" data-act="night-next">Devam</button>`;
+  } else if (p.role !== 'golge') {
     body = `<h3>Sen bir Muhafız'sın.</h3><p>Gözlerin kapalı; bekçinin sopası kaldırımlarda yankılanıyor. Hiçbir şey yapma.</p><button class="btn" data-act="night-next">Uyumaya devam et</button>`;
   } else if (p.id !== decider.id || N.decision) {
     body = `<h3>Gölge</h3><p>${N.decision ? 'Hamle seçildi.' : 'Ortağın bu gecenin hamlesine karar veriyor.'}</p><button class="btn" data-act="night-next">Devam</button>`;
@@ -441,14 +487,14 @@ function nightView() {
 }
 
 function morningView() {
-  return `<h2>Sabah</h2>${(S.morning || []).map((t) => `<p class="paper">${esc(t)}</p>`).join('')}
-    <button class="btn gold" data-act="morning">${S.day >= era(S).days ? (caseOf(S).dynamic ? 'Büyük Divan\'a geç' : 'Divan\'a geç') : 'Yeni güne başla'}</button>`;
+  return `${v2img('sabah', 'scene-img')}<h2>Sabah</h2>${(S.morning || []).map((t) => `<p class="paper">${esc(t)}</p>`).join('')}
+    <button class="btn gold" data-act="morning">${S.day >= eraDays(S) ? (caseOf(S).dynamic ? 'Büyük Divan\'a geç' : 'Divan\'a geç') : 'Yeni güne başla'}</button>`;
 }
 
 function divanView() {
   const d = S.divan;
   const c = caseOf(S);
-  const title = d.final ? 'Büyük Divan' : `Divan · ${esc(era(S).perde)}`;
+  const title = `${v2img(d.final ? 'buyuk_divan' : 'divan', 'scene-img')}${d.final ? 'Büyük Divan' : `Divan · ${esc(era(S).perde)}`}`;
   if (d.step === 'ruh') {
     const r = player(S, d.ruhQueue[0]);
     if (r.isBot) return `<h2>${title}</h2><p>${esc(r.name)}'in Ruhu bir rüya seçiyor…</p>`;
@@ -460,28 +506,35 @@ function divanView() {
       <div class="claims">${d.cards.map((card, i) => flipCard({ id: fid('ruh', S.eraIndex, r.id, i), delay: i * 140, front: `<button class="btn ${card.valid ? 'gold' : ''}" data-act="ruh" data-card="${i}" ${card.valid ? '' : 'disabled'}>${card.symbols.map((x) => `${IZ_CATEGORIES[x.cat].label}: <b>${esc(x.val)}</b>`).join('<br>')}</button>` })).join('')}</div>`;
   }
   if (d.step === 'suclama') {
-    const sug = botAccuse(S, activePlayers(S).find((p) => p.isBot && p.role !== 'golge')?.id);
-    const anyBot = S.players.some((p) => p.isBot);
+    const voters = activePlayers(S);
+    const next = voters.find((v) => !v.isBot && !(v.id in d.accuseVotes));
+    const rows = voters.map((v) => {
+      const vote = d.accuseVotes[v.id];
+      const txt = vote ? `${esc(c.suspects.find((x) => x.id === vote.suspect).name)} · ${esc(c.methods.find((m) => m.id === vote.method).label)}` : v.isBot ? '<i>düşünüyor…</i>' : '<i>bekliyor</i>';
+      return `<div class="vrow">${avatar(v)} <b>${esc(v.name)}</b> <span class="chip">${txt}</span></div>`;
+    }).join('');
     return `<h2>${title} · Vaka suçlaması</h2>
-      <p>Masa birlikte karar verir: <b>${esc(c.victim)}</b>'i kim öldürdü, nasıl?</p>
-      <form data-form="accuse" class="accuse">
-        <fieldset><legend>Katil</legend>${c.suspects.map((x, i) => `<label><input type="radio" name="suspect" value="${x.id}" ${i === 0 ? 'checked' : ''}> <b>${esc(x.name)}</b> <span>${esc(x.desc)}</span></label>`).join('')}</fieldset>
+      <p><b>${esc(c.victim)}</b>'i kim öldürdü, nasıl? Önce masada tartışın, sonra herkes kendi oyunu versin. En çok oy alan şüpheli ve yöntem Divan'ın kararıdır.</p>
+      <div class="votes">${rows}</div>
+      ${next ? `<form data-form="accuse" class="accuse"><input type="hidden" name="voter" value="${next.id}">
+        <h3>${avatar(next)} ${esc(next.name)}'in oyu</h3>
+        <fieldset><legend>Katil</legend>${c.suspects.map((x, i) => `<label class="sus-opt">${v2img('supheli_' + x.id, 'sus-av')}<input type="radio" name="suspect" value="${x.id}" ${i === 0 ? 'checked' : ''}> <b>${esc(x.name)}</b> <span>${esc(x.desc)}</span></label>`).join('')}</fieldset>
         <fieldset><legend>Yöntem</legend>${c.methods.map((m, i) => `<label><input type="radio" name="method" value="${m.id}" ${i === 0 ? 'checked' : ''}> ${esc(m.label)}</label>`).join('')}</fieldset>
-        ${anyBot ? `<p class="hint">Botların önerisi: ${esc(c.suspects.find((x) => x.id === sug.suspect).name)}, ${esc(c.methods.find((m) => m.id === sug.method).label)}.</p>` : ''}
-        <button class="btn gold">Suçla</button>
-      </form>`;
+        <button class="btn gold">Oyumu ver</button>
+      </form>` : '<p class="hint">Botlar oy veriyor…</p>'}`;
   }
   if (d.step === 'suclama-sonuc') {
     const r = d.result;
     return `<h2>${title} · Çözüm</h2><p class="big ${r.ok ? 'ok' : 'no'}">${r.ok ? 'Doğru!' : 'Yanlış!'} ${r.ok ? '' : ''}</p>
       <div class="paper">${esc(r.solution)}</div>
-      <p>${r.ok ? 'Bir tılsım geri döndü ve Büyük Divan için 1 Delil pulu kazandınız.' : 'Bir tılsım kayboldu.'}${r.methodOk ? '' : ' (Yöntem tahmini tutmadı.)'}</p>
-      <button class="btn gold" data-act="divan-next">${S.exilesUsed >= RULES.EXILES_BEFORE_FINAL || !golgeler(S).length ? 'Devam' : 'Sürgün oylamasına geç'}</button>`;
+      <p>${r.ok ? `Vaka çözüldü. ${r.methodOk ? 'Yöntem de doğru' : 'Yöntem yanlış'}${d.restored ? ': kayıp bir tılsım geri döndü.' : '.'} Her ${RULES.DELIL_PER_CASES} çözülen vaka Büyük Divan'da bir Delil pulu açar.` : 'Bir tılsım kayboldu.'}</p>
+      <button class="btn gold" data-act="divan-next">${S.eraIndex < RULES.EXILE_FROM_ERA || S.exilesUsed >= RULES.EXILES_BEFORE_FINAL || !golgeler(S).length ? 'Devam' : (RULES.EXILE_MODE === 'gozalti' ? 'Gözaltı oylamasına geç' : 'Sürgün oylamasına geç')}</button>`;
   }
   if (d.step === 'surgun' || d.step === 'final-oy') return voteView(title, d.step === 'final-oy');
   if (d.step === 'sonuc') {
     const last = [...S.defter].reverse().find((e) => e.type === 'divan');
-    return `<h2>${title}</h2>${d.skipExile ? '<p class="hint">Sürgün hakkı kullanıldı; oylama yapılmadı.</p>' : `<p class="paper">${esc(last?.text || '')}</p>`}
+    const skip = d.skipExile === 'erken' ? `${RULES.EXILE_MODE === 'gozalti' ? 'Gözaltı' : 'Sürgün'} oylaması Perde ${['I', 'II', 'III', 'IV'][RULES.EXILE_FROM_ERA]}'den itibaren yapılır.` : 'Oylama hakkı kalmadı.';
+    return `<h2>${title}</h2>${d.skipExile ? `<p class="hint">${skip}</p>` : `<p class="paper">${esc(last?.text || '')}</p>`}
       <button class="btn gold" data-act="divan-next">Usturlabı çevir: sonraki perde</button>`;
   }
   return `<h2>${title}</h2><p>…</p>`;
@@ -492,8 +545,12 @@ function voteView(title, final) {
   const voters = activePlayers(S);
   const cands = activePlayers(S);
   const tally = voteTally(S);
-  return `<h2>${title} · ${final ? 'Gölge kim?' : 'Sürgün oylaması'}</h2>
-    ${final ? `<p>Delil Kutusu açıldı. ${S.delilRevealed.length ? 'Açılan pullar: ' + S.delilRevealed.map((x, i) => flipCard({ id: fid('delil', x.cat, x.val), tag: 'span', delay: i * 180, front: `<span class="chip">${IZ_CATEGORIES[x.cat].label}: ${esc(x.val)}</span>` })).join(' ') : 'Hiç pul açılmadı.'}</p>` : `<p>Biri Gölge mi? Çoğunluk (${Math.floor(voters.length / 2) + 1} oy) bir kişiyi sürerse rol kartı açılır. Masum biri sürülürse bir tılsım kaybolur. "Pas" da geçerli bir oydur.</p>`}
+  const gz = RULES.EXILE_MODE === 'gozalti';
+  const delilChips = S.delilRevealed.map((x, i) => flipCard({ id: fid('delil', x.cat, x.val), tag: 'span', delay: i * 180, front: `<span class="chip">${izIcon(x.cat, x.shown ? x.shown[0] : x.val)}${IZ_CATEGORIES[x.cat].label}: ${x.shown ? `ya ${esc(x.shown[0])} ya ${esc(x.shown[1])}` : esc(x.val)}</span>` })).join(' ');
+  return `<h2>${title} · ${final ? 'Gölge kim?' : gz ? 'Gözaltı oylaması' : 'Sürgün oylaması'}</h2>
+    ${final ? `<p>${S.mission ? `Gölge'nin görevi "${esc(S.mission.title)}" tutmadı. ` : ''}Delil Kutusu açıldı: ${delilChips || 'hiç pul açılmadı.'}</p>`
+      : gz ? `<p>Şüphelendiğiniz biri var mı? Çoğunluk (${Math.floor(voters.length / 2) + 1} oy) bir kişiyi gözaltına alırsa o oyuncu bir sonraki perde hiçbir eylem yapamaz; Gölge'yse gece hamlesi de yapamaz. Rol kartı kapalı kalır. "Pas" da geçerli bir oydur.</p>`
+      : `<p>Biri Gölge mi? Çoğunluk (${Math.floor(voters.length / 2) + 1} oy) bir kişiyi sürerse rol kartı açılır. Masum biri sürülürse bir tılsım kaybolur.</p>`}
     ${suspectTable()}
     <div class="votes">${voters.map((v) => {
       const has = v.id in d.votes;
@@ -507,12 +564,57 @@ function voteView(title, final) {
 
 function overView() {
   const win = S.winner === 'muhafiz';
+  const img = v2(win ? 'zafer_muhafiz' : 'zafer_golge') || `assets/${win ? 'rol_muhafiz' : 'rol_golge'}.webp`;
+  const mp = missionProgress(S);
   return `<div class="over ${win ? 'win' : 'lose'}">
-    <img src="assets/${win ? 'rol_muhafiz' : 'rol_golge'}.webp" alt="">
+    <img src="${img}" alt="">
     <div><h2>${win ? 'Muhafızlar kazandı' : 'Gölge kazandı'}</h2><p class="paper">${esc(S.winReason)}</p>
-    <h3>Roller</h3><div class="plist">${S.players.map((p) => `<div class="pl">${avatar(p)}<div><b>${esc(p.name)}</b><br><span>${esc(charOf(p).name)}</span></div>${flipCard({ id: fid('son', p.id), tag: 'span', slow: p.role === 'golge', delay: p.role === 'golge' ? 500 : 0, front: `<em class="${p.role}">${p.role === 'golge' ? 'GÖLGE' : 'Muhafız'}</em>` })}</div>`).join('')}</div>
-    <p>Çözülen vaka: <b>${S.solvedCases}</b> · Kalan tılsım: <b>${tilsimCount(S)}</b> · Cinayet: <b>${S.bodies.length}</b> · Tohum: <b>${S.seed}</b></p>
-    <div class="btns"><button class="btn gold" data-act="replay">Aynı masayla yeni oyun</button><button class="btn" data-act="quit">Ana menü</button></div></div></div>`;
+    ${S.mission ? `<p class="hint">Gölge'nin gizli görevi: <b>${esc(S.mission.title)}</b> · ${esc(S.mission.text)} ${mp ? `(${mp.have}/${mp.need})` : ''}</p>` : ''}
+    <h3>Roller</h3><div class="plist">${S.players.map((p) => `<div class="pl">${avatar(p)}<div><b>${esc(p.name)}</b><br><span>${esc(charOf(p).name)}</span></div>${flipCard({ id: fid('son', p.id), tag: 'span', slow: isEvil(p), delay: isEvil(p) ? 500 : 0, front: `<em class="${p.role}">${ROLE_NAME[p.role]}</em>` })}</div>`).join('')}</div>
+    <p>Perde: <b>${S.eraIndex + 1}/4</b> · Çözülen vaka: <b>${S.solvedCases}</b> · Kalan tılsım: <b>${tilsimCount(S)}</b> · Cinayet: <b>${S.bodies.length}</b> · Tohum: <b>${S.seed}</b></p>
+    <div class="btns">
+      <button class="btn gold" data-act="replay">Rövanş: aynı masa, yeni roller</button>
+      <button class="btn" data-act="report-md">Test raporunu indir</button>
+      <button class="btn ghost" data-act="report-json">Ham veri (JSON)</button>
+      <button class="btn ghost" data-act="quit">Ana menü</button>
+    </div>
+    <p class="hint">Rövanş aynı koltuklarla yeni bir tohumla başlar: Gölge, Suç Ortağı ve gizli görev yeniden dağıtılır.</p></div></div>`;
+}
+
+function reportData() {
+  return {
+    oyun: 'MUAMMA', surum: '0.2', tarih: new Date().toISOString(), tohum: S.seed, mod: S.mode,
+    kazanan: S.winner, sebep: S.winReason, ulasilanPerde: S.eraIndex + 1, gorev: S.mission, gorevIlerleme: missionProgress(S),
+    kalanTilsim: tilsimCount(S), cozulenVaka: S.solvedCases, vakalar: S.caseResults,
+    oyuncular: S.players.map((p) => ({ ad: p.name, bot: p.isBot, karakter: charOf(p).name, rol: ROLE_NAME[p.role], durum: { alive: 'Hayatta', ruh: p.exiled ? 'Ruh (sürgün)' : 'Ruh', ifsa: 'İfşa edildi', surgun: 'Sürgün' }[p.status] || p.status, yakalananYalan: p.liesCaught })),
+    cinayetler: S.bodies.map((b) => ({ perde: b.era + 1, kurban: player(S, b.victimId).name, mekan: b.loc, iz: b.iz })),
+    kurallar: RULES,
+    defter: S.defter.map((e) => ({ perde: e.era, gun: e.day, tur: e.type, metin: e.text })),
+  };
+}
+
+function reportMarkdown() {
+  const r = reportData();
+  const lines = [
+    `# MUAMMA test raporu`, '', `${new Date().toLocaleString('tr-TR')} · tohum ${r.tohum} · sürüm ${r.surum}`, '',
+    `**Sonuç:** ${r.kazanan === 'muhafiz' ? 'Muhafızlar' : 'Gölge'} kazandı. ${r.sebep}`, '',
+    '| Ölçü | Değer |', '| --- | --- |',
+    `| Ulaşılan perde | ${r.ulasilanPerde}/4 |`, `| Çözülen vaka | ${r.cozulenVaka} |`, `| Kalan tılsım | ${r.kalanTilsim}/7 |`,
+    `| Cinayet | ${r.cinayetler.length} |`, `| Gölge görevi | ${r.gorev ? `${r.gorev.title} (${r.gorevIlerleme?.have}/${r.gorevIlerleme?.need})` : '-'} |`, '',
+    '## Oyuncular', '', '| Ad | Karakter | Rol | Durum | Yakalanan yalan |', '| --- | --- | --- | --- | --- |',
+    ...r.oyuncular.map((p) => `| ${p.ad}${p.bot ? ' (bot)' : ''} | ${p.karakter} | ${p.rol} | ${p.durum} | ${p.yakalananYalan} |`), '',
+    '## Divan kararları', '', ...r.vakalar.map((v) => `- Perde ${v.era + 1}: ${v.ok ? 'doğru' : 'yanlış'} suçlama${v.ok ? (v.methodOk ? ', yöntem doğru' : ', yöntem yanlış') : ''}`), '',
+    '## Test notları', '', '- En sıkıldığımız an:', '- "Aha!" anı:', '- Anlaşılmayan kural:', '- Süre:', '',
+    '## Defter', '', ...r.defter.filter((e) => e.tur !== 'hareket').map((e) => `- ${e.perde} G${e.gun} [${TYPE_LABEL[e.tur] || e.tur}] ${e.metin}`),
+  ];
+  return lines.join('\n');
+}
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ---------- 3D tahta (ui/board3d, dinamik yüklenir; WebGL yoksa SVG yedeği) ----------
@@ -553,12 +655,13 @@ function toggleView() {
 }
 function reachNow() {
   const p = currentPlayer(S);
-  return p && !p.isBot && S.phase === 'day' && !S.pending ? reachable(S, p) : {};
+  if (!p || p.isBot || S.phase !== 'day' || S.pending) return {};
+  return p.status === 'ruh' ? Object.fromEntries(hauntOptions(S).map((l) => [l, 1])) : reachable(S, p);
 }
 function boardHTML(reach, currentId) {
-  if (use3D()) return `<div data-board-slot></div>${b3mod.a11yHTML(S, { reach, currentId })}`;
+  if (use3D()) return `<div data-board-slot></div>${b3mod.a11yHTML(S, { reach, currentId, reachLabel: currentPlayer(S)?.status === 'ruh' ? 'Perili yapılabilir' : 'Gidilebilir' })}`;
   if (want3D()) { loadBoard3D(); return '<div class="stage-loading" role="status">Tahta yükleniyor…</div>'; }
-  return boardSVG(S, { reach, currentId });
+  return boardSVG(S, { reach, currentId, tahta: v2('tahta'), perili: v2('perili') });
 }
 function syncBoard() {
   if (!b3) return;
@@ -573,6 +676,7 @@ function syncBoard() {
 function pickNode(loc) {
   const cur = S && currentPlayer(S);
   if (!cur || cur.isBot || S.pending) return undefined;
+  if (cur.status === 'ruh') return hauntOptions(S).includes(loc) ? dispatch({ type: 'haunt', playerId: cur.id, loc }) : undefined;
   if (loc in reachable(S, cur)) return dispatch({ type: 'move', playerId: cur.id, to: loc });
   return undefined;
 }
@@ -604,7 +708,7 @@ function pump() {
     return;
   }
   if (['roles', 'prolog', 'era-intro', 'morning'].includes(S.phase)) return;
-  if (S.phase === 'divan' && ['suclama', 'suclama-sonuc', 'sonuc'].includes(S.divan.step)) return;
+  if (S.phase === 'divan' && ['suclama-sonuc', 'sonuc'].includes(S.divan.step)) return;
   const a = botTurn(S);
   if (!a) return;
   const wait = S.phase === 'night' ? Math.max(1400, delay) : delay;
@@ -623,7 +727,9 @@ app.addEventListener('click', (ev) => {
     case 'help': ui.modal = helpModal; return render();
     case 'close': ui.modal = null; return render();
     case 'quit': S = null; ui.modal = null; ui.night = null; clearTimeout(timer); return render();
-    case 'replay': clearSave(); ui.setup.seed = Math.floor(Math.random() * 1e6); return startNew();
+    case 'replay': clearSave(); ui.setup.seed = Math.floor(Math.random() * 1e6); ui.gameNo = (ui.gameNo || 1) + 1; return startNew();
+    case 'report-md': return download(`muamma_rapor_${S.seed}.md`, reportMarkdown(), 'text/markdown');
+    case 'report-json': return download(`muamma_rapor_${S.seed}.json`, JSON.stringify(reportData(), null, 2), 'application/json');
     case 'gate-open': ui.gate[el.dataset.key] = true; return render();
     case 'role-show': ui.roleShown = true; return render();
     case 'role-hide': ui.roleQueue.shift(); ui.roleShown = false; return render();
@@ -679,7 +785,7 @@ app.addEventListener('submit', (ev) => {
     ui.modal = null;
     return dispatch({ type: 'solve', playerId: currentPlayer(S).id, answer: fd.get('answer') || '' });
   }
-  if (f.dataset.form === 'accuse') return dispatch({ type: 'accuse', suspect: fd.get('suspect'), method: fd.get('method') });
+  if (f.dataset.form === 'accuse') return dispatch({ type: 'accuse-vote', playerId: Number(fd.get('voter')), suspect: fd.get('suspect'), method: fd.get('method') });
   return undefined;
 });
 

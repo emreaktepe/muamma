@@ -5,7 +5,7 @@ import { playToEnd } from '../src/game/autoplay.js';
 const N = Number(process.argv[2] || 200);
 const rows = [];
 for (const count of [4, 5, 6, 7, 8]) {
-  const r = { oyuncu: count, muhafiz: 0, golge: 0, sebep: {}, cozulen: 0, tilsim: 0, olum: 0, erken: 0 };
+  const r = { oyuncu: count, muhafiz: 0, golge: 0, sebep: {}, cozulen: 0, tilsim: 0, olum: 0, erken: 0, gorev: 0 };
   for (let i = 0; i < N; i++) {
     const s = createGame({ seed: 1000 * count + i, players: Array.from({ length: count }, (_, k) => ({ name: `Bot ${k + 1}`, isBot: true })) });
     playToEnd(s);
@@ -16,6 +16,7 @@ for (const count of [4, 5, 6, 7, 8]) {
     r.tilsim += tilsimCount(s);
     r.olum += s.bodies.length;
     if (s.eraIndex < 3) r.erken += 1;
+    if (s.mission?.done) r.gorev += 1;
   }
   rows.push({
     oyuncu: count,
@@ -25,6 +26,7 @@ for (const count of [4, 5, 6, 7, 8]) {
     'ort. kalan tılsım': (r.tilsim / N).toFixed(2),
     'ort. cinayet': (r.olum / N).toFixed(2),
     'IV. perdeden önce biten %': Math.round((100 * r.erken) / N),
+    'görevle kazanan Gölge %': Math.round((100 * r.gorev) / N),
   });
   console.log(`\n${count} oyuncu — bitiş sebepleri:`, r.sebep);
 }
