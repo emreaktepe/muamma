@@ -3,14 +3,54 @@
 import { LOCATIONS, TILSIMLAR } from '../../game/data/locations.js';
 import { isOpen, locName, era } from '../../game/engine.js';
 
-export const BOARD_W = 840;
-export const BOARD_H = 440;
-export const SCALE = 0.01; // 1 tahta birimi = 0.01 dünya birimi
+// Tahta = hazır sanat görseli (public/assets/harita.webp, 1254x1254, kare). 1 tahta birimi = 0.01 dünya birimi.
+export const BOARD_W = 580;
+export const BOARD_H = 580;
+export const SCALE = 0.01;
+export const MAP_IMG = 'assets/harita.webp';
 
 export const toWorld = (x, y) => ({ x: (x - BOARD_W / 2) * SCALE, z: (y - BOARD_H / 2) * SCALE });
 export const toBoard = (wx, wz) => ({ x: wx / SCALE + BOARD_W / 2, y: wz / SCALE + BOARD_H / 2 });
+// Dünya (x,z) <-> doku koordinatı (u,v: 0..1, v aşağı doğru; görselin sol üstü 0,0)
+export const toUV = (wx, wz) => ({ u: wx / (BOARD_W * SCALE) + 0.5, v: wz / (BOARD_H * SCALE) + 0.5 });
+export const uvToWorld = (u, v) => ({ x: (u - 0.5) * BOARD_W * SCALE, z: (v - 0.5) * BOARD_H * SCALE });
 
-const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Mekân -> görseldeki krem daire eşlemesi (yalnız 3B tahta için; 2D tahta ve src/game bunu kullanmaz).
+// Daire merkezleri harita.webp üzerinde piksel analiziyle bulundu (1254x1254, krem dolgu bileşenleri) ve 1254'e bölündü.
+// Görselde 17 daire var, oyunda 16 mekân: sağ alttaki (1031,974) Haydarpaşa dairesi kullanılmıyor. Eşleşme konuma/simgeye göre:
+//   Galata Kulesi = kule dibindeki daire, Ayasofya = kubbe, Kız Kulesi = adadaki daire, Yerebatan = sütunlu sarnıç,
+//   Hipodrom = dikilitaş/yılanlı sütun, Kapalıçarşı = kırmızı çatılı çarşı, Rumeli Hisarı = sağ üst hisar,
+//   Süleymaniye = sol üst kubbeli cami, Pera = kuzeydeki büyük binalar, Tophane = vinçli rıhtım (Galata yakası),
+//   Üsküdar = sağdaki camili yaka, Yenikapı = vinçli liman, Topkapı = doğu burnundaki kubbeli yapı,
+//   Surlar = güney uçtaki sur kuleleri, Sirkeci = güney kıyı kapısı, Çemberlitaş = batıdaki kule/sur dairesi.
+// a: etiket hizası (c: ortalı, l: sola, r: sağa doğru uzar); yakın daireler arasında etiket çakışmasını önler.
+const px = (x, y, a = 'c') => ({ u: x / 1254, v: y / 1254, a });
+export const LOC_UV = {
+  pera: px(722, 138),
+  rumelihisari: px(1085, 226, 'l'),
+  galata: px(611, 279, 'l'),
+  tophane: px(795, 299),
+  suleymaniye: px(286, 405),
+  ayasofya: px(749, 543),
+  yerebatan: px(591, 601),
+  kizkulesi: px(1014, 601),
+  kapalicarsi: px(363, 610),
+  cemberlitas: px(172, 671, 'r'),
+  topkapi: px(802, 693),
+  hipodrom: px(498, 773, 'l'),
+  sirkeci: px(635, 796, 'r'),
+  uskudar: px(1053, 831),
+  yenikapi: px(340, 878),
+  surlar: px(204, 976, 'r'),
+};
+
+// Mekânın tahta uzayındaki (0..580) merkezi
+export function anchor(id) {
+  const m = LOC_UV[id];
+  return { x: m.u * BOARD_W, y: m.v * BOARD_H };
+}
+
+const esc =(t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Aynı mekândaki piyonların yerleşimi (2D tahta ile aynı düzen).
 function pawnSlot(L, i, n) {
@@ -32,14 +72,15 @@ export function snapshot(s, { reach = {}, currentId = null, showRuh = true } = {
   }
   for (const [loc, ps] of Object.entries(byLoc)) {
     ps.forEach((p, i) => {
-      const pos = pawnSlot(LOCATIONS[loc], i, ps.length);
+      const pos = pawnSlot(anchor(loc), i, ps.length);
       pawns.push({ id: p.id, charId: p.charId, name: p.name, loc, x: pos.x, y: pos.y, ruh: p.status === 'ruh', cur: p.id === currentId });
     });
   }
   const tokens = [];
-  for (const [id, L] of Object.entries(LOCATIONS)) {
+  for (const [id, L0] of Object.entries(LOCATIONS)) {
     if (!isOpen(s, id)) continue;
-    if (L.tilsim) {
+    const L = anchor(id);
+    if (L0.tilsim) {
       const state = !s.tilsim[id] ? 'stolen' : s.protectedTilsim[id] ? 'safe' : 'open';
       tokens.push({ key: `tilsim:${id}`, kind: 'tilsim', loc: id, state, x: L.x, y: L.y, level: 0 });
     }
@@ -49,10 +90,10 @@ export function snapshot(s, { reach = {}, currentId = null, showRuh = true } = {
   }
   const bodyCount = {};
   for (const b of s.bodies) {
-    const L = LOCATIONS[b.loc];
+    const L = anchor(b.loc);
     const level = bodyCount[b.loc] || 0;
     bodyCount[b.loc] = level + 1;
-    tokens.push({ key: `body:${b.loc}:${b.victimId}`, kind: 'body', loc: b.loc, state: b.examined ? 'examined' : 'fresh', x: L.x - 18, y: L.y + 16, level });
+    tokens.push({ key: `body:${b.loc}:${b.victimId}`, kind: 'body', loc: b.loc, state: b.examined ? 'examined' : 'fresh', x: L.x - 21, y: L.y + 6, level });
   }
   return { era: era(s).id, reach: Object.keys(reach), pawns, tokens };
 }

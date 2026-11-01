@@ -1,12 +1,13 @@
-// Tahta düzlemindeki bir noktadan (840x440 uzayı) en yakın mekânı bulur. three'siz, test edilebilir.
-import { LOCATIONS } from '../../game/data/locations.js';
+// Doku koordinatındaki (u,v: 0..1) bir noktadan en yakın mekânı bulur. three'siz, test edilebilir.
+import { LOC_UV } from './model.js';
 
-export function nearestLocation(x, y, radius = 22, only = null) {
+// radius: doku uzayında (0.04 ~ görselde 50 px)
+export function nearestLocation(u, v, radius = 0.04, only = null) {
   let best = null;
   let bd = radius * radius;
-  for (const [id, L] of Object.entries(LOCATIONS)) {
+  for (const [id, m] of Object.entries(LOC_UV)) {
     if (only && !only.includes(id)) continue;
-    const d = (L.x - x) ** 2 + (L.y - y) ** 2;
+    const d = (m.u - u) ** 2 + (m.v - v) ** 2;
     if (d <= bd) { bd = d; best = id; }
   }
   return best;

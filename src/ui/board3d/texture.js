@@ -1,120 +1,65 @@
-// Prosedürel dokular (yeni görsel dosyası yok): tahta yüzeyi ve ahşap masa. three'siz; yalnız 2D canvas bağlamı ister.
+// Prosedürel yardımcı dokular: mekân etiketleri (parşömen şerit), ahşap masa, vinyet, parlama.
+// Harita görselinin kendisi hazır sanat dosyasıdır (model.js: MAP_IMG); burada çizilmez. three'siz; yalnız 2D canvas bağlamı ister.
 import { LOCATIONS } from '../../game/data/locations.js';
-import { edges, isOpen, locName, era } from '../../game/engine.js';
-import { BOARD_W, BOARD_H } from './model.js';
+import { isOpen, locName } from '../../game/engine.js';
+import { LOC_UV, BOARD_W } from './model.js';
 
-export const TEX_SCALE = 2;
-export const TEX_W = BOARD_W * TEX_SCALE;
-export const TEX_H = BOARD_H * TEX_SCALE;
-
-const C = { navy: '#14213D', turq: '#1E8C93', coral: '#B5332E', gold: '#C9A43A', parch: '#EFE3C8', ink: '#1A1A1A' };
-// Çağa göre kâğıt/deniz tonu (çok hafif; ışık rengi sahnede ayrıca değişir)
-const TINT = { c532: 'rgba(120,60,130,.10)', c1580: 'rgba(30,140,147,.08)', c1933: 'rgba(160,120,40,.16)', bugun: 'rgba(138,155,168,.10)' };
-
-const LAND = [
-  'M0 196 L300 184 L360 200 L432 214 L500 252 L512 300 L470 352 L398 394 L300 410 L170 414 L0 404 Z',
-  'M0 0 L590 0 L596 30 L560 90 L528 160 L470 178 L400 168 L320 166 L200 170 L0 174 Z',
-  'M840 0 L650 0 L640 60 L668 140 L650 220 L660 300 L640 380 L700 440 L840 440 Z',
-];
-
-function mulberry(seed) {
+export function mulberry(seed) {
   let a = seed >>> 0;
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-export function drawBoardTexture(ctx, s) {
-  const id = era(s).id;
-  ctx.save();
-  ctx.scale(TEX_SCALE, TEX_SCALE);
-  // deniz
-  const sea = ctx.createLinearGradient(0, 0, BOARD_W, BOARD_H);
-  sea.addColorStop(0, '#1a2d52'); sea.addColorStop(1, '#101c38');
-  ctx.fillStyle = sea;
-  ctx.fillRect(0, 0, BOARD_W, BOARD_H);
-  ctx.strokeStyle = 'rgba(80,110,170,.35)';
-  ctx.lineWidth = 1.3;
-  for (let y = 4; y < BOARD_H + 26; y += 26) {
-    for (let x = (y / 26) % 2 ? 4 : -18; x < BOARD_W; x += 44) {
-      ctx.beginPath(); ctx.moveTo(x, y + 13); ctx.quadraticCurveTo(x + 6, y + 8, x + 12, y + 13); ctx.quadraticCurveTo(x + 18, y + 18, x + 24, y + 13); ctx.stroke();
-    }
-  }
-  // kara: kâğıt dokusu + kıyı gölgesi
-  const rnd = mulberry(7);
-  for (const d of LAND) {
-    const p = new Path2D(d);
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 3;
-    ctx.fillStyle = C.parch; ctx.fill(p);
-    ctx.restore();
-    ctx.save();
-    ctx.clip(p);
-    const g = ctx.createRadialGradient(300, 250, 40, 300, 250, 600);
-    g.addColorStop(0, 'rgba(255,248,225,.35)'); g.addColorStop(1, 'rgba(150,120,70,.28)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, BOARD_W, BOARD_H);
-    for (let i = 0; i < 900; i++) {
-      ctx.fillStyle = `rgba(120,90,40,${(rnd() * 0.06).toFixed(3)})`;
-      ctx.fillRect(rnd() * BOARD_W, rnd() * BOARD_H, 1 + rnd() * 5, 1 + rnd());
-    }
-    ctx.restore();
-    ctx.strokeStyle = '#B9A57A'; ctx.lineWidth = 2; ctx.stroke(p);
-  }
-  ctx.fillStyle = TINT[id] || 'rgba(0,0,0,0)';
-  ctx.fillRect(0, 0, BOARD_W, BOARD_H);
-  // su adları
-  ctx.font = '700 12px Cinzel, Georgia, serif';
-  ctx.fillStyle = '#2aa0a8';
-  ctx.textAlign = 'center';
-  for (const [x, y, t, r] of [[150, 186, 'HALİÇ', 0], [612, 160, 'BOĞAZ', -78], [560, 424, 'MARMARA', 0]]) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate((r * Math.PI) / 180);
-    if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '4px';
-    ctx.fillText(t, 0, 0); ctx.restore();
-  }
-  // yollar
-  for (const e of edges(s)) {
-    const A = LOCATIONS[e.a], B = LOCATIONS[e.b];
-    ctx.beginPath(); ctx.lineCap = 'round';
-    if (e.kind === 'land') {
-      ctx.setLineDash([2, 6]); ctx.strokeStyle = '#7a6440'; ctx.lineWidth = 2.4;
-      ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y);
-    } else {
-      const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2 - (e.kind === 'rail' ? -24 : 16);
-      ctx.setLineDash(e.kind === 'rail' ? [10, 4] : [7, 5]);
-      ctx.strokeStyle = e.kind === 'rail' ? '#e0aa48' : '#38b0b8'; ctx.lineWidth = 2.4;
-      ctx.moveTo(A.x, A.y); ctx.quadraticCurveTo(mx, my, B.x, B.y);
-    }
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
-  // mekânlar
-  for (const [lid, L] of Object.entries(LOCATIONS)) {
-    const open = isOpen(s, lid);
-    ctx.beginPath(); ctx.arc(L.x, L.y, 12, 0, Math.PI * 2);
-    ctx.fillStyle = open ? C.parch : '#9b9488'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = open ? C.gold : '#6b665e';
-    ctx.setLineDash(open ? [] : [3, 3]); ctx.stroke(); ctx.setLineDash([]);
-    if (L.tilsim && open) { // tılsım yuvası: 3B yıldız bunun üstüne oturur
-      ctx.beginPath(); ctx.arc(L.x, L.y, 7.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(80,60,30,.35)'; ctx.fill();
-    }
-  }
-  // etiketler (en üstte)
-  ctx.font = '700 17px "Cormorant Garamond", Georgia, serif';
-  ctx.lineJoin = 'round'; ctx.lineWidth = 4.5;
-  for (const [lid, L] of Object.entries(LOCATIONS)) {
-    const open = isOpen(s, lid);
-    const [dx, dy, anc] = L.label;
-    ctx.textAlign = anc === 'middle' ? 'center' : anc === 'end' ? 'right' : 'left';
-    const name = open ? locName(s, lid) : 'Henüz yok';
-    ctx.strokeStyle = L.island ? C.navy : C.parch;
-    ctx.fillStyle = !open ? '#8b8478' : L.island ? C.parch : C.ink;
-    ctx.strokeText(name, L.x + dx, L.y + dy);
-    ctx.fillText(name, L.x + dx, L.y + dy);
-  }
-  ctx.fillStyle = C.gold;
-  ctx.font = '400 14px Cinzel, Georgia, serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${era(s).perde} · ${era(s).year}`, 828, 20);
-  ctx.restore();
+// ---- etiketler: dairenin altında, parşömen şeritli, çağa göre ad ----
+export const LABEL_CW = 640; // etiket dokusu (px); düzlem dünya genişliği LABEL_WORLD_W
+export const LABEL_CH = 80;
+export const LABEL_WORLD_W = 2.1;
+export const LABEL_WORLD_H = (LABEL_WORLD_W * LABEL_CH) / LABEL_CW;
+const LABEL_FONT = 40;
+const LABEL_PAD = 22;
+export const LABEL_DV = 0.038; // etiket merkezi, daire merkezinin bu kadar (doku uzayı) altındadır
+
+export const labelName = (s, id) => (isOpen(s, id) ? locName(s, id) : 'Henüz yok');
+
+// Şerit genişliği (canvas px); ölçüm yoksa karakter başına kaba tahmin
+export function labelStripWidth(text, measure = (t) => t.length * LABEL_FONT * 0.47) {
+  const w = measure(text) + LABEL_PAD * 2;
+  return Math.min(LABEL_CW - 4, w);
+}
+
+// Doku uzayında etiket kutuları (çakışma/sınır testi ve düzlem yerleşimi için)
+export function labelLayout(s, measure) {
+  const wUV = (LABEL_WORLD_W * 100) / BOARD_W; // tüm doku genişliğine oranı
+  return Object.keys(LOCATIONS).map((id) => {
+    const m = LOC_UV[id];
+    const name = labelName(s, id);
+    const sw = labelStripWidth(name, measure) / LABEL_CW * wUV;
+    const cx = m.a === 'l' ? m.u + 0.025 - sw / 2 : m.a === 'r' ? m.u - 0.025 + sw / 2 : m.u;
+    const cy = m.v + LABEL_DV;
+    const hh = ((LABEL_FONT + 10) / LABEL_CH) * (LABEL_WORLD_H * 100 / BOARD_W) / 2;
+    return { id, name, open: isOpen(s, id), cx, cy, left: cx - sw / 2, right: cx + sw / 2, top: cy - hh, bottom: cy + hh };
+  });
+}
+
+// Tek etiket dokusu: şerit, canvas içinde hizaya göre yerleşir (a: c/l/r; l = şerit sağa yaslı)
+export function drawLabel(ctx, name, { open = true, a = 'c' } = {}) {
+  ctx.clearRect(0, 0, LABEL_CW, LABEL_CH);
+  ctx.font = `700 ${LABEL_FONT}px "Cormorant Garamond", Georgia, serif`;
+  const sw = labelStripWidth(name, (t) => ctx.measureText?.(t)?.width ?? t.length * LABEL_FONT * 0.47);
+  const x = a === 'l' ? LABEL_CW - sw - 2 : a === 'r' ? 2 : (LABEL_CW - sw) / 2;
+  const y = (LABEL_CH - (LABEL_FONT + 10)) / 2, h = LABEL_FONT + 10;
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  if (open) { g.addColorStop(0, '#f4e8c8'); g.addColorStop(1, '#dcc99a'); } else { g.addColorStop(0, '#a29c8e'); g.addColorStop(1, '#847e72'); }
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.fillRect(x + 2, y + 3, sw, h);
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, sw, h);
+  ctx.strokeStyle = open ? '#9c7a2e' : '#5e5a52'; ctx.lineWidth = 2.5;
+  ctx.strokeRect(x + 1, y + 1, sw - 2, h - 2);
+  ctx.strokeStyle = open ? 'rgba(201,164,58,.8)' : 'rgba(120,115,105,.6)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 5, y + 5, sw - 10, h - 10);
+  ctx.fillStyle = open ? '#1a1208' : '#4a463f';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(name, x + sw / 2, y + h / 2 + 2, sw - LABEL_PAD);
 }
 
 // Ahşap masa: boyuna damarlı tahtalar, çiviler arası dikişler.
@@ -123,15 +68,14 @@ export function drawWoodTexture(ctx, w, h, seed = 11) {
   const planks = 6;
   const ph = h / planks;
   for (let p = 0; p < planks; p++) {
-    const base = 52 + rnd() * 16;
+    const base = 46 + rnd() * 16;
     const y0 = p * ph;
     for (let y = 0; y < ph; y += 1) {
       const wob = Math.sin(y * 0.35 + p) * 3 + (rnd() - 0.5) * 7;
       const l = base + wob;
-      ctx.fillStyle = `rgb(${(l * 1.55) | 0},${(l * 0.98) | 0},${(l * 0.52) | 0})`;
+      ctx.fillStyle = `rgb(${(l * 1.5) | 0},${(l * 0.95) | 0},${(l * 0.52) | 0})`;
       ctx.fillRect(0, y0 + y, w, 1);
     }
-    // damarlar
     for (let i = 0; i < 70; i++) {
       const y = y0 + rnd() * ph;
       ctx.strokeStyle = `rgba(20,8,0,${(0.06 + rnd() * 0.12).toFixed(2)})`;
@@ -141,7 +85,6 @@ export function drawWoodTexture(ctx, w, h, seed = 11) {
       for (let x = 0; x <= w; x += 32) ctx.lineTo(x, y + Math.sin(x * f + i) * amp);
       ctx.stroke();
     }
-    // budak
     if (rnd() > 0.4) {
       const kx = rnd() * w, ky = y0 + ph * (0.25 + rnd() * 0.5);
       for (let r = 3; r < 26; r += 3) {
@@ -152,4 +95,18 @@ export function drawWoodTexture(ctx, w, h, seed = 11) {
     ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, y0, w, 2);
     ctx.fillStyle = 'rgba(255,200,140,.08)'; ctx.fillRect(0, y0 + 2, w, 1);
   }
+}
+
+// Masa üstüne yumuşak ışık havuzu / kenar karartması (şeffaf kaplama dokusu)
+export function drawVignette(ctx, w, h) {
+  const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.12, w / 2, h / 2, Math.max(w, h) * 0.58);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.55, 'rgba(4,6,12,.28)'); g.addColorStop(1, 'rgba(2,3,8,.82)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+}
+
+// Parlama dokusu: yumuşak radyal beyaz (tılsım ışıltısı, halkalar)
+export function drawGlow(ctx, w, h) {
+  const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
 }

@@ -1,0 +1,45 @@
+/* Açılış ekranı: hazır İstanbul görseli üstünde Minyatür Noir. Hareket kapalıysa (html[data-anim="kapali"] ya da prefers-reduced-motion) statik. */
+.land {
+  --px: 0; --py: 0;
+  position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; isolation: isolate;
+  background: #060b18; color: var(--parch);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.land > * { position: absolute; pointer-events: none; }
+.l-bg { inset: -3%; transform: translate(calc(var(--px) * -10px), calc(var(--py) * -6px)); }
+.l-bg img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 38%; display: block;
+  animation: l-zoom 40s ease-in-out infinite alternate; transform-origin: 62% 55%; }
+.l-glow { inset: 0; background:
+  linear-gradient(180deg, rgba(3,6,15,.0) 0%, rgba(3,6,15,.0) 38%, rgba(3,6,15,.55) 66%, rgba(3,6,15,.9) 100%),
+  radial-gradient(70% 50% at 50% 100%, rgba(3,6,15,.75), transparent 75%); }
+.l-vignette { inset: 0; background: radial-gradient(120% 95% at 50% 40%, transparent 58%, rgba(2,4,10,.7) 100%); }
+
+.l-content { position: relative; inset: auto; pointer-events: auto; z-index: 2; display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 0 18px clamp(22px, 5vh, 52px); width: min(100%, 760px); }
+.l-kicker { margin: 0; font-size: .8rem; letter-spacing: .5em; text-transform: uppercase; color: #d9ccaa; text-shadow: 0 2px 12px #000; animation: l-rise 1.1s .2s both; }
+.l-logo { margin: .1em 0 0; font-family: Cinzel, serif; font-weight: 700; font-size: clamp(2.8rem, 11vw, 6.4rem); letter-spacing: .14em; padding-left: .14em; line-height: 1.05;
+  background: linear-gradient(180deg, #f6e3a1 8%, #d8b44c 48%, #9a7420 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 3px 14px rgba(0,0,0,.9)) drop-shadow(0 0 28px rgba(232,201,107,.25)); animation: l-rise 1.3s .35s both; }
+.l-title { margin: .1em 0 0; font-family: Cinzel, serif; font-size: clamp(.95rem, 3vw, 1.4rem); letter-spacing: .26em; text-transform: uppercase; color: var(--gold); text-shadow: 0 2px 16px #000; animation: l-rise 1.2s .55s both; }
+.l-tag { margin: .6em 0 clamp(16px, 3vh, 26px); color: #e3d7b6; font-style: italic; font-size: clamp(1rem, 2.6vw, 1.2rem); text-shadow: 0 2px 12px #000; animation: l-rise 1.2s .7s both; }
+.l-menu { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; animation: l-rise 1.2s .9s both; }
+.l-btn { font-family: Cinzel, serif; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; font-size: .9rem;
+  min-height: 46px; padding: .7em 1.5em; color: var(--parch); background: rgba(10,19,40,.72); border: 1px solid rgba(201,164,58,.6); border-radius: 4px;
+  backdrop-filter: blur(4px); transition: background .2s, box-shadow .2s, transform .1s, border-color .2s; }
+.l-btn:hover { background: rgba(36,54,94,.88); border-color: var(--gold); box-shadow: 0 0 18px rgba(201,164,58,.35); }
+.l-btn:active { transform: translateY(1px); }
+.l-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.l-btn.primary { font-size: 1.05rem; font-weight: 700; padding: .75em 2.4em; color: #1a1305; border-color: #f0d98a;
+  background: linear-gradient(180deg, #e2c46d, #b88f2a); box-shadow: 0 0 26px rgba(201,164,58,.45), inset 0 1px 0 rgba(255,255,255,.4); animation: l-glow 3.2s ease-in-out infinite; }
+.l-btn.primary:hover { background: linear-gradient(180deg, #f0d98a, #c9a43a); box-shadow: 0 0 36px rgba(232,201,107,.7); }
+.l-btn.ghost { font-size: .78rem; background: rgba(8,14,30,.6); border-color: rgba(201,164,58,.35); }
+.l-foot { margin: 1.4em 0 0; font-family: 'Courier Prime', monospace; font-size: .72rem; letter-spacing: .1em; color: rgba(217,204,170,.55); }
+
+@keyframes l-zoom { from { transform: scale(1.0); } to { transform: scale(1.09); } }
+@keyframes l-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes l-glow { 0%, 100% { box-shadow: 0 0 22px rgba(201,164,58,.4), inset 0 1px 0 rgba(255,255,255,.4); } 50% { box-shadow: 0 0 40px rgba(232,201,107,.65), inset 0 1px 0 rgba(255,255,255,.4); } }
+
+@media (max-width: 560px) { .l-bg img { object-position: 30% 40%; } .l-menu { flex-direction: column; width: min(100%, 300px); } .l-btn { width: 100%; } }
+@media (max-height: 520px) { .l-kicker, .l-tag { display: none; } }
+html[data-anim="kapali"] .land *, html[data-anim="kapali"] .land { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .land * { animation: none !important; } }

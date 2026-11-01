@@ -1,3 +1,4 @@
+import './audio/music.js';
 import '@fontsource/cinzel/400.css';
 import '@fontsource/cinzel/700.css';
 import '@fontsource/cormorant-garamond/500.css';
@@ -6,6 +7,7 @@ import '@fontsource/cormorant-garamond/700.css';
 import '@fontsource/courier-prime/400.css';
 import './styles.css';
 import './ui/flip.css';
+import './ui/components.css';
 
 import {
   createGame, startGame, act, era, caseOf, player, activePlayers, charOf, reachable, availableActions,
@@ -21,6 +23,8 @@ import { CASES } from './game/data/cases.js';
 import { boardSVG } from './ui/board.js';
 import { canUse3D, initialView, saveView } from './ui/view-mode.js';
 import { flipCard, activateFlips, initFlip, resetFlips } from './ui/flip.js';
+import { landingView } from './ui/landing.js';
+import { ico, IZ_ICON } from './ui/icons.js';
 import { ANIM_MODES, ANIM_LABELS, getAnim, setAnim, applyAnim, watchSystemMotion } from './ui/anim.js';
 
 const app = document.getElementById('app');
@@ -42,6 +46,7 @@ const ui = {
   roleShown: false,
   night: null,       // { queue:[ids], pos, shown, decision }
   error: null,
+  landing: true,     // açılış ekranı (Oyuna Başla ile kapanır)
 };
 
 function defaultSetup() {
@@ -190,8 +195,65 @@ function roleView() {
     </div></div>`;
 }
 
+// ---- ortak bileşen yardımcıları (ui/components.css ile birlikte) ----
+
+const pips = (n, total, cls = '') => `<span class="pips ${cls}" aria-hidden="true">${Array.from({ length: Math.max(total, n) }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span>`;
+
+const badge = (txt, kind = '', icon = '') => `<span class="badge ${kind}">${icon ? ico(icon) : ''}${esc(txt)}</span>`;
+
+const izChip = (cat, v, extra = '') => `<span class="chip iz-chip iz-${cat} ${extra}" data-tip="${esc(IZ_CATEGORIES[cat].label)} izi">${ico(IZ_ICON[cat] || 'dot')}${IZ_CATEGORIES[cat].label}: <b>${esc(v)}</b></span>`;
+
+const secHead = (icon, title, sub = '') => `<div class="sec-head">${ico(icon)}<div><h3>${title}</h3>${sub ? `<p>${sub}</p>` : ''}</div></div>`;
+
+const ERA_COUNT = Object.keys(CASES).length;
+
+const ENTRY_ICON = { acik: 'eye', iddia: 'speech', tanik: 'speech', bulmaca: 'puzzle', iz: 'footprint', olay: 'moon', ruh: 'dream', divan: 'gavel', curutuldu: 'x', yetenek: 'bolt', koru: 'shield', hareket: 'walk', son: 'star' };
+
+const ABILITY_REASON = {
+  arsiv: 'Başkasının gizli bilgisi yok', takip: 'Aynı mekânda kimse yok', katman: 'Bu mekânda derin katman yok',
+  otopsi: 'Ceset ya da delil yok', pozlama: 'Burası zaten fotoğraflandı',
+};
+
+function eraTrack() {
+  return `<ol class="era-track" aria-label="Çağlar">${Array.from({ length: ERA_COUNT }, (_, i) => `<li class="${i < S.eraIndex ? 'done' : i === S.eraIndex ? 'cur' : ''}" ${i === S.eraIndex ? 'aria-current="step"' : ''}></li>`).join('')}</ol>`;
+}
+
+function actionReason(key, p, av, puz) {
+  const c = charOf(p);
+  switch (key) {
+    case 'acik': return av.acik ? '' : `En az ${av.acikCost} eylem gerekir`;
+    case 'coz': return av.coz ? '' : puz ? 'Bulmaca çözüldü' : 'Burada bulmaca yok';
+    case 'koru': return av.koru ? '' : S.tilsim[p.loc] ? 'Burası zaten korunuyor' : 'Burada tılsım yok';
+    case 'yetenek':
+      if (av.yetenek) return '';
+      if (c.passive) return 'Sürekli yetenek: kendiliğinden işler';
+      if (p.abilityUsedEra === S.eraIndex) return 'Bu çağda zaten kullandın';
+      return ABILITY_REASON[c.ability] || 'Şu an kullanılamaz';
+    default: return '';
+  }
+}
+
+function actCard({ act, icon, name, cost, desc, ok, reason, gold = false }) {
+  const why = ok ? '' : reason;
+  return `<button class="act-card ${gold ? 'hot' : ''} ${ok ? '' : 'is-off'}" data-act="${act}" ${ok ? '' : 'disabled'} title="${esc(why || desc)}">
+    <span class="ac-ico">${ico(icon)}</span>
+    <span class="ac-body"><b>${name}</b><span class="ac-sub">${esc(why || desc)}</span></span>
+    <span class="ac-cost" aria-label="${cost} eylem">${pips(cost, cost, 'cost')}</span>
+  </button>`;
+}
+
+const TAB_ICON = { defter: 'notes', ipucu: 'lens', vaka: 'folder', iz: 'lens', oyuncular: 'users' };
+
+const DIVAN_STEPS = [['ruh', 'Ruh', 'dream'], ['suclama', 'Suçlama', 'gavel'], ['suclama-sonuc', 'Çözüm', 'lens'], ['surgun', 'Oylama', 'vote'], ['sonuc', 'Sonuç', 'check']];
+
+function divanStepper(step) {
+  const key = step === 'final-oy' ? 'surgun' : step;
+  const at = DIVAN_STEPS.findIndex(([k]) => k === key);
+  return `<ol class="stepper" aria-label="Divan aşamaları">${DIVAN_STEPS.map(([k, l, i], n) => `<li class="${n < at ? 'done' : n === at ? 'cur' : ''}" ${n === at ? 'aria-current="step"' : ''}>${ico(i)}<span>${l}</span></li>`).join('')}</ol>`;
+}
+
 function izChips(iz) {
-  return Object.entries(iz).map(([cat, v]) => `<span class="chip">${IZ_CATEGORIES[cat].label}: <b>${esc(v)}</b></span>`).join('');
+  return Object.entries(iz).map(([cat, v]) => izChip(cat, v)).join('');
 }
 
 function charCard(p, ctx = 'rol') {
@@ -229,6 +291,14 @@ function eraIntroView() {
 
 function headerView() {
   const e = era(S);
+  const n = tilsimCount(S);
+  const low = n <= RULES.TILSIM_LOSE_AT + 1;
+  const ph = S.phase === 'divan' ? { k: 'divan', t: 'Divan', i: 'gavel' }
+    : S.phase === 'night' ? { k: 'night', t: `Gece ${S.day}`, i: 'moon' }
+      : S.phase === 'morning' ? { k: 'morning', t: `Sabah ${S.day}`, i: 'sun' }
+        : { k: 'day', t: `Gün ${S.day}/${e.days}`, i: 'sun' };
+  const days = S.phase === 'divan' ? '' : `<span class="pips days" aria-hidden="true">${Array.from({ length: e.days }, (_, i) => `<i class="${i + 1 < S.day ? 'on' : i + 1 === S.day ? 'cur' : ''}"></i>`).join('')}</span>`;
+  const stars = Object.keys(TILSIMLAR).map((l) => `<span class="ts ${S.tilsim[l] ? 'on' : 'off'}" data-tip="${esc(TILSIMLAR[l])}: ${S.tilsim[l] ? 'yerinde' : 'kayıp'}">${ico('star')}<span class="sr-only">${esc(TILSIMLAR[l])} ${S.tilsim[l] ? 'yerinde' : 'kayıp'}</span></span>`).join('');
   return `<header class="topbar" style="--era:${e.color}">
     <div class="brand"><img src="icons/icon-32.png" alt="">MUAMMA</div>
     <div class="era"><b>${esc(e.perde)}</b> · ${esc(e.year)} · ${esc(caseOf(S).title)}</div>
@@ -238,8 +308,8 @@ function headerView() {
     <div class="tools">
       <select data-in="speed" aria-label="Bot hızı">${Object.keys(DELAYS).map((k) => `<option value="${k}" ${ui.speed === k ? 'selected' : ''}>${{ yavas: 'Yavaş', normal: 'Normal', hizli: 'Hızlı' }[k]}</option>`).join('')}</select>
       ${CAN3D ? `<button class="btn small ghost view-toggle" data-act="view-toggle" aria-pressed="${ui.view === 'basit'}" title="3D masa görünümü ile düz tahta arasında geçiş">${ui.view === '3d' ? 'Basit görünüm' : '3D görünüm'}</button>` : ''}
-      <button class="btn small ghost" data-act="help">Kurallar</button>
-      <button class="btn small ghost" data-act="quit">Menü</button>
+      <button class="btn small ghost" data-act="help">${ico('help')}Kurallar</button>
+      <button class="btn small ghost" data-act="quit">${ico('menu')}Menü</button>
     </div>
   </header>`;
 }
@@ -267,19 +337,24 @@ function actionPanel() {
   const reach = Object.keys(reachable(S, p)).length;
   const puz = puzzleAt(S, p.loc);
   const body = bodyAt(S, p.loc);
-  return `<div class="actions">
-    <div class="who">${avatar(p, 'md')}<div><h3>${esc(p.name)}</h3><p>${esc(c.name)} · <b>${esc(locName(S, p.loc))}</b></p><p class="acts">Kalan eylem: <b>${p.actionsLeft}</b></p></div></div>
-    ${body ? '<p class="warn">Burada incelenmemiş bir ceset var. İncele eylemi izini ortaya çıkarır.</p>' : ''}
-    <p class="hint">${reach ? 'Yürümek için haritada parlayan bir mekâna tıkla.' : 'Buradan gidilecek yer yok.'}</p>
-    <div class="abtns">
-      <button class="btn" data-act="gizli" ${av.gizli ? '' : 'disabled'} title="1 eylem. Paragrafı yalnız sen okursun, masaya istediğini söylersin.">Gizli İncele <small>1</small></button>
-      <button class="btn" data-act="acik" ${av.acik ? '' : 'disabled'} title="Paragrafı herkese açık okur; yalan imkânsız.">Açık İncele <small>${p.charId === 'selma' ? 1 : 2}</small></button>
-      <button class="btn" data-act="sorgula" title="Tanık ve tarih notu">Sorgula <small>1</small></button>
-      <button class="btn" data-act="coz" ${av.coz ? '' : 'disabled'} title="${puz ? esc(puz.title) : 'Burada bulmaca yok'}">Bulmaca${puz && av.coz ? ': ' + esc(puz.title) : ''} <small>1</small></button>
-      <button class="btn" data-act="koru" ${av.koru ? '' : 'disabled'} title="Bu gece buradaki tılsım çalınamaz">Tılsımı Koru <small>1</small></button>
-      <button class="btn" data-act="yetenek" ${av.yetenek ? '' : 'disabled'} title="${esc(c.abilityText)}">${esc(c.abilityName)}${c.passive ? ' (sürekli)' : ''} <small>1</small></button>
-      <button class="btn ghost" data-act="notes">Gizli notlarım</button>
-      <button class="btn ghost" data-act="end-turn">Sırayı bitir</button>
+  const left = p.actionsLeft;
+  const cards = [
+    { act: 'gizli', icon: 'eyeOff', name: 'Gizli İncele', cost: 1, desc: 'Paragrafı yalnız sen okursun; masaya istediğini söylersin.', ok: !!av.gizli },
+    { act: 'acik', icon: 'eye', name: 'Açık İncele', cost: av.acikCost || 2, desc: 'Herkese açık okunur; yalan imkânsız.', ok: !!av.acik, reason: actionReason('acik', p, av, puz) },
+    { act: 'sorgula', icon: 'speech', name: 'Sorgula', cost: 1, desc: 'Tanık ve tarih notu.', ok: true },
+    { act: 'coz', icon: 'puzzle', name: puz && av.coz ? `Bulmaca` : 'Bulmaca', cost: 1, desc: puz ? puz.title : 'Burada bulmaca yok', ok: !!av.coz, reason: actionReason('coz', p, av, puz) },
+    { act: 'koru', icon: 'shield', name: 'Tılsımı Koru', cost: 1, desc: 'Bu gece buradaki tılsım çalınamaz.', ok: !!av.koru, reason: actionReason('koru', p, av, puz) },
+    { act: 'yetenek', icon: 'bolt', name: `${esc(c.abilityName)}${c.passive ? ' (sürekli)' : ''}`, cost: 1, desc: c.abilityText, ok: !!av.yetenek, reason: actionReason('yetenek', p, av, puz) },
+  ];
+  return `<div class="actions" data-turn="${p.id}">
+    <div class="who">${avatar(p, 'md')}<div><h3>${esc(p.name)}</h3><p>${esc(c.name)} · <b>${ico('footprint')}${esc(locName(S, p.loc))}</b></p>
+      <p class="acts" aria-label="Kalan eylem: ${left}">Kalan eylem: <b>${left}</b> ${pips(left, RULES.ACTIONS_PER_DAY, 'left')}</p></div></div>
+    ${body ? `<p class="callout danger">${ico('skull')}<span>Burada incelenmemiş bir ceset var. İncele eylemi izini ortaya çıkarır.</span></p>` : ''}
+    <p class="callout ${reach ? 'info' : 'muted'}">${ico(reach ? 'walk' : 'lock')}<span>${reach ? 'Yürümek için haritada parlayan bir mekâna tıkla.' : 'Buradan gidilecek yer yok.'}</span></p>
+    <div class="abtns">${cards.map(actCard).join('')}</div>
+    <div class="abtns foot">
+      <button class="btn ghost" data-act="notes">${ico('notes')}Gizli notlarım</button>
+      <button class="btn ghost" data-act="end-turn">${ico('hourglass')}Sırayı bitir</button>
     </div>
   </div>`;
 }
@@ -294,7 +369,7 @@ function defterView() {
     hepsi: () => true,
   }[filter] || (() => true);
   const items = S.defter.filter(keep).slice(-120).reverse();
-  return `<div class="defter">${items.map((e) => `<div class="entry t-${e.type}"><span class="tag">${TYPE_LABEL[e.type] || e.type}</span><span class="when">${esc(e.era)}${e.day ? ' · G' + e.day : ''}</span><p>${esc(e.text)}</p></div>`).join('') || '<p class="hint">Defter boş.</p>'}</div>`;
+  return `<div class="defter" role="log" aria-label="Defter">${items.map((e, i) => `<div class="entry t-${e.type} ${i === 0 ? 'fresh' : ''}"><div class="e-head"><span class="tag">${ico(ENTRY_ICON[e.type] || 'dot')}${TYPE_LABEL[e.type] || e.type}</span><span class="when">${esc(e.era)}${e.day ? ' · G' + e.day : ''}</span></div><p>${esc(e.text)}</p></div>`).join('') || `<p class="empty">${ico('notes')}Defter boş. İncelemeler ve olaylar buraya yazılır.</p>`}</div>`;
 }
 
 function caseView() {
@@ -336,20 +411,21 @@ function suspectTable() {
     ${S.players.map((p) => {
       const iz = charOf(p).iz;
       const ok = ev.length ? consistentWith(p, ev) : null;
-      return `<tr class="${isActive(p) ? '' : 'out'}"><td>${esc(p.name)}</td>${cats.map((c) => `<td>${esc(iz[c])}</td>`).join('')}<td>${ok === null ? '–' : ok ? '<b class="ok">uyuyor</b>' : '<span class="no">elendi</span>'}</td></tr>`;
-    }).join('')}</tbody></table>
+      return `<tr class="${isActive(p) ? '' : 'out'} ${ok === false ? 'elim' : ''}"><th scope="row">${esc(p.name)}</th>${cats.map((c) => `<td class="${must.has(`${c}=${iz[c]}`) ? 'hit' : ''}">${esc(iz[c])}</td>`).join('')}<td>${ok === null ? '<span class="muted">–</span>' : ok ? `<b class="ok verdict">${ico('check')}uyuyor</b>` : `<span class="no verdict">${ico('x')}elendi</span>`}</td></tr>`;
+    }).join('')}</tbody></table></div>
   </div>`;
 }
 
 function sidePanel() {
+  const hintCount = S.defter.filter((e) => ['acik', 'iddia', 'bulmaca', 'iz', 'ruh', 'curutuldu'].includes(e.type)).length;
+  const tabs = [['defter', 'Defter'], ['ipucu', 'İpuçları'], ['vaka', caseOf(S).dynamic ? 'İz Tablosu' : 'Vaka'], ['iz', 'İz Tablosu'], ['oyuncular', 'Oyuncular']]
+    .filter(([k]) => !(k === 'iz' && caseOf(S).dynamic));
   return `<aside class="side">
     ${actionPanel()}
-    <div class="tabs">
-      ${[['defter', 'Defter'], ['ipucu', 'İpuçları'], ['vaka', caseOf(S).dynamic ? 'İz Tablosu' : 'Vaka'], ['iz', 'İz Tablosu'], ['oyuncular', 'Oyuncular']]
-        .filter(([k], i, arr) => !(k === 'iz' && caseOf(S).dynamic))
-        .map(([k, l]) => `<button class="tab ${ui.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}
+    <div class="tabs" role="tablist" aria-label="Paneller">
+      ${tabs.map(([k, l]) => `<button class="tab ${ui.tab === k ? 'on' : ''}" role="tab" aria-selected="${ui.tab === k}" data-act="tab" data-tab="${k}">${ico(TAB_ICON[k])}<span>${l}</span>${k === 'ipucu' && hintCount ? `<i class="count">${hintCount}</i>` : ''}</button>`).join('')}
     </div>
-    <div class="tabbody">${ui.tab === 'vaka' ? caseView() : ui.tab === 'iz' ? suspectTable() : ui.tab === 'oyuncular' ? playerList() : defterView()}</div>
+    <div class="tabbody" role="tabpanel">${ui.tab === 'vaka' ? caseView() : ui.tab === 'iz' ? suspectTable() : ui.tab === 'oyuncular' ? playerList() : defterView()}</div>
   </aside>`;
 }
 
@@ -382,7 +458,7 @@ function overlay() {
 }
 
 function modal(inner, cls = '') {
-  return `<div class="overlay"><div class="modal ${cls}">${inner}</div></div>`;
+  return `<div class="overlay"><div class="modal ${cls}" role="dialog" aria-modal="true">${inner}</div></div>`;
 }
 
 function claimView(p) {
@@ -393,10 +469,10 @@ function claimView(p) {
     ${v2img('mekan_' + pd.loc, 'loc-img', pd.loc === 'galata' ? 'assets/mekan_galata.webp' : null)}
     ${flipCard({ id: fid('claim', S.defter.length, p.id), cls: 'paper-flip', front: `<div class="paper">${esc(pd.text)}</div>` })}
     <p class="hint">Masaya ne söyleyeceksin? Defterde "iddia" olarak görünür. Biri burayı Açık İnceleme ile okursa yalanın ortaya çıkar.</p>
-    <div class="claims">
-      <button class="btn gold" data-act="claim" data-claim="dogru">Doğruyu söyle<br><small>${esc(pd.trueSummary)}</small></button>
-      ${pd.isFake ? '' : `<button class="btn coral" data-act="claim" data-claim="sahte">Yalan söyle<br><small>${esc(pd.decoy)}</small></button>`}
-      <button class="btn ghost" data-act="claim" data-claim="sus">Hiçbir şey söyleme</button>
+    <div class="claims claim-choices">
+      <button class="btn gold claim-opt" data-act="claim" data-claim="dogru" autofocus><span class="co-h">${ico('check')}Doğruyu söyle</span><small>${esc(pd.trueSummary)}</small></button>
+      ${pd.isFake ? '' : `<button class="btn coral claim-opt" data-act="claim" data-claim="sahte"><span class="co-h">${ico('speech')}Yalan söyle</span><small>${esc(pd.decoy)}</small></button>`}
+      <button class="btn ghost claim-opt" data-act="claim" data-claim="sus"><span class="co-h">${ico('lock')}Hiçbir şey söyleme</span></button>
     </div>`;
 }
 
@@ -406,17 +482,17 @@ function puzzleModal() {
   return `<h2>Bulmaca · ${esc(puz.title)}</h2>
     ${v2img(`bulmaca_${era(S).year === 'Bugün' ? 'bugun' : era(S).year}_${p.loc}`, 'loc-img')}
     ${flipCard({ id: fid('bulmaca', puz.id ?? puz.title, S.eraIndex), cls: 'paper-flip', front: `<div class="paper">${esc(puz.text)}</div>` })}
-    ${p.charId === 'zeynep' ? `<p class="hint">Hat Bilgisi ipucu: ${esc(puz.hint)}</p>` : ''}
+    ${p.charId === 'zeynep' ? `<p class="callout info">${ico('info')}<span>Hat Bilgisi ipucu: ${esc(puz.hint)}</span></p>` : ''}
     <form data-form="solve" class="solve"><input name="answer" autocomplete="off" placeholder="Cevabın" aria-label="Cevap" autofocus>
-    <button class="btn gold">Cevapla</button><button type="button" class="btn ghost" data-act="close">Vazgeç</button></form>
-    <p class="hint">Yanlış cevap ${p.charId === 'zeynep' ? 'sana ceza getirmez' : 'yarın 1 eylem kaybettirir'}.</p>`;
+    <button class="btn gold">${ico('check')}Cevapla</button><button type="button" class="btn ghost" data-act="close">Vazgeç</button></form>
+    <p class="hint">${ico('info')} Yanlış cevap ${p.charId === 'zeynep' ? 'sana ceza getirmez' : 'yarın 1 eylem kaybettirir'}.</p>`;
 }
 
 function takipModal() {
   const p = currentPlayer(S);
   const others = activePlayers(S).filter((o) => o.id !== p.id && o.loc === p.loc);
-  return `<h2>Takip</h2><p>Aynı mekândaki kimi takip edeceksin? O gece suikast yaparsa sabah herkes öğrenir.</p>
-    <div class="claims">${others.map((o) => `<button class="btn" data-act="takip" data-target="${o.id}">${avatar(o)} ${esc(o.name)}</button>`).join('')}</div>
+  return `<h2 class="m-title">${ico('footprint')}Takip</h2><p>Aynı mekândaki kimi takip edeceksin? O gece suikast yaparsa sabah herkes öğrenir.</p>
+    <div class="claims">${others.map((o) => `<button class="btn target-btn" data-act="takip" data-target="${o.id}">${avatar(o)} ${esc(o.name)}</button>`).join('')}</div>
     <button class="btn ghost" data-act="close">Vazgeç</button>`;
 }
 
@@ -429,8 +505,8 @@ function notesModal() {
     <p>Rolün: <b>${ROLE_NAME[p.role]}</b>${isEvil(p) ? ' · ' + (p.role === 'golge' ? 'Suç Ortağın' : 'Gölge') + ': ' + (S.players.filter((q) => q.id !== p.id && isEvil(q)).map((g) => esc(g.name)).join(', ') || 'yok') : ''}</p>
     ${p.role === 'golge' && S.mission ? missionCard() : ''}
     ${charCard(p, 'notlar')}
-    <div class="defter">${notes.map((n) => `<div class="entry"><span class="when">${esc(n.era)} · G${n.day}</span><p>${esc(n.text)}</p></div>`).join('') || '<p class="hint">Henüz gizli not yok.</p>'}</div>
-    <button class="btn gold" data-act="close">Kapat</button>`;
+    <div class="defter">${notes.map((n) => `<div class="entry"><div class="e-head"><span class="tag">${ico('lock')}Gizli</span><span class="when">${esc(n.era)} · G${n.day}</span></div><p>${esc(n.text)}</p></div>`).join('') || `<p class="empty">${ico('notes')}Henüz gizli not yok.</p>`}</div>
+    <button class="btn gold" data-act="close" autofocus>Kapat</button>`;
 }
 
 function helpModal() {
@@ -458,9 +534,9 @@ function nightView() {
   const N = ui.night;
   const p = player(S, N.queue[N.pos]);
   if (!N.shown && multiHuman()) {
-    return `<div class="overlay night"><div class="gate-card dark">${avatar(p, 'lg')}<h3>Gece · sıra ${esc(p.name)}'de</h3>
+    return `<div class="overlay night"><div class="gate-card dark" role="dialog" aria-modal="true">${avatar(p, 'lg')}<h3>Gece · sıra ${esc(p.name)}'de</h3>
       <p>Cihazı ${esc(p.name)}'e ver. Diğerleri gözlerini kapatıp masaya vursun.</p>
-      <button class="btn gold" data-act="night-show">Göster</button></div></div>`;
+      <button class="btn gold" data-act="night-show" autofocus>${ico('eye')}Göster</button></div></div>`;
   }
   const decider = gHumans[0];
   let body;
@@ -469,21 +545,21 @@ function nightView() {
   } else if (p.role !== 'golge') {
     body = `<h3>Sen bir Muhafız'sın.</h3><p>Gözlerin kapalı; bekçinin sopası kaldırımlarda yankılanıyor. Hiçbir şey yapma.</p><button class="btn" data-act="night-next">Uyumaya devam et</button>`;
   } else if (p.id !== decider.id || N.decision) {
-    body = `<h3>Gölge</h3><p>${N.decision ? 'Hamle seçildi.' : 'Ortağın bu gecenin hamlesine karar veriyor.'}</p><button class="btn" data-act="night-next">Devam</button>`;
+    body = `<h3>${ico('skull')}Gölge</h3><p>${N.decision ? 'Hamle seçildi.' : 'Ortağın bu gecenin hamlesine karar veriyor.'}</p><button class="btn" data-act="night-next" autofocus>Devam</button>`;
   } else {
     const o = nightOptions(S);
     const me = charOf(p).iz;
-    body = `<h3>Gölge, bu gece ne yapacaksın?</h3>
-      <div class="nopt"><h4>Suikast ${o.kills.length ? '' : '<small>(şu an mümkün değil)</small>'}</h4>
-        ${o.kills.map((k) => { const v = player(S, k.target); return `<div class="krow">${avatar(v)} <b>${esc(v.name)}</b> · ${esc(locName(S, v.loc))}
-          <span>Bırakacağın iz:</span>${Object.entries(me).map(([cat, val]) => `<button class="btn small coral" data-act="n-kill" data-target="${v.id}" data-cat="${cat}">${IZ_CATEGORIES[cat].label}: ${esc(val)}</button>`).join('')}</div>`; }).join('')}
+    body = `<h3>${ico('skull')}Gölge, bu gece ne yapacaksın?</h3>
+      <div class="nopt"><h4>${ico('skull')}Suikast ${o.kills.length ? '' : '<small>(şu an mümkün değil)</small>'}</h4>
+        ${o.kills.map((k) => { const v = player(S, k.target); return `<div class="krow">${avatar(v)} <b>${esc(v.name)}</b> <span class="where">${esc(locName(S, v.loc))}</span>
+          <span class="krow-l">Bırakacağın iz:</span><span class="krow-b">${Object.entries(me).map(([cat, val]) => `<button class="btn small coral" data-act="n-kill" data-target="${v.id}" data-cat="${cat}">${ico(IZ_ICON[cat])}${IZ_CATEGORIES[cat].label}: ${esc(val)}</button>`).join('')}</span></div>`; }).join('')}
       </div>
-      <div class="nopt"><h4>Tılsım çal ${o.steals.length ? '' : '<small>(yakında korumasız tılsım yok)</small>'}</h4>
-        ${o.steals.map((x) => `<button class="btn small" data-act="n-steal" data-loc="${x.loc}">${esc(TILSIMLAR[x.loc])} · ${esc(locName(S, x.loc))}</button>`).join('')}</div>
-      ${o.fakes.length ? `<div class="nopt"><h4>Sahte iz bırak</h4><select data-in="fakeLoc">${o.fakes.map((l) => `<option value="${l}">${esc(locName(S, l))}</option>`).join('')}</select> <button class="btn small" data-act="n-fake">Bırak</button></div>` : ''}
+      <div class="nopt"><h4>${ico('star')}Tılsım çal ${o.steals.length ? '' : '<small>(yakında korumasız tılsım yok)</small>'}</h4>
+        ${o.steals.map((x) => `<button class="btn small" data-act="n-steal" data-loc="${x.loc}">${ico('star')}${esc(TILSIMLAR[x.loc])} · ${esc(locName(S, x.loc))}</button>`).join('')}</div>
+      ${o.fakes.length ? `<div class="nopt"><h4>${ico('footprint')}Sahte iz bırak</h4><select data-in="fakeLoc" aria-label="Mekân">${o.fakes.map((l) => `<option value="${l}">${esc(locName(S, l))}</option>`).join('')}</select> <button class="btn small" data-act="n-fake">Bırak</button></div>` : ''}
       <button class="btn ghost" data-act="n-pas">Bu gece hiçbir şey yapma</button>`;
   }
-  return `<div class="overlay night"><div class="modal dark">${body}</div></div>`;
+  return `<div class="overlay night"><div class="modal dark" role="dialog" aria-modal="true">${body}</div></div>`;
 }
 
 function morningView() {
@@ -497,13 +573,13 @@ function divanView() {
   const title = `${v2img(d.final ? 'buyuk_divan' : 'divan', 'scene-img')}${d.final ? 'Büyük Divan' : `Divan · ${esc(era(S).perde)}`}`;
   if (d.step === 'ruh') {
     const r = player(S, d.ruhQueue[0]);
-    if (r.isBot) return `<h2>${title}</h2><p>${esc(r.name)}'in Ruhu bir rüya seçiyor…</p>`;
+    if (r.isBot) return `<h2 class="m-title">${ico('gavel')}${title}</h2>${head}<p class="thinking" role="status">${esc(r.name)}'in Ruhu bir rüya seçiyor<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></p>`;
     const key = `ruh:${S.eraIndex}:${r.id}`;
     if (gateNeeded(key)) return gateView(key, r, 'Ruhun rüya kartları.');
     const killer = player(S, r.killedBy);
-    return `<h2>${title} · Ruh</h2><img class="ruh-img" src="assets/rol_ruh.webp" alt="">
+    return `<h2 class="m-title">${ico('dream')}${title} · Ruh</h2>${head}<img class="ruh-img" src="assets/rol_ruh.webp" alt="">
       <p>${esc(r.name)}, seni <b>${esc(killer.name)}</b> öldürdü. Konuşamazsın; masaya bir rüya göster. Yalnız katiline en az bir simgesi uyan rüyaları seçebilirsin.</p>
-      <div class="claims">${d.cards.map((card, i) => flipCard({ id: fid('ruh', S.eraIndex, r.id, i), delay: i * 140, front: `<button class="btn ${card.valid ? 'gold' : ''}" data-act="ruh" data-card="${i}" ${card.valid ? '' : 'disabled'}>${card.symbols.map((x) => `${IZ_CATEGORIES[x.cat].label}: <b>${esc(x.val)}</b>`).join('<br>')}</button>` })).join('')}</div>`;
+      <div class="claims dreams">${d.cards.map((card, i) => flipCard({ id: fid('ruh', S.eraIndex, r.id, i), delay: i * 140, front: `<button class="btn dream-card ${card.valid ? 'gold' : ''}" data-act="ruh" data-card="${i}" ${card.valid ? '' : 'disabled'} ${card.valid ? '' : 'title="Katile uymuyor"'}>${card.symbols.map((x) => `<span class="dsym">${ico(IZ_ICON[x.cat])}${IZ_CATEGORIES[x.cat].label}: <b>${esc(x.val)}</b></span>`).join('')}</button>` })).join('')}</div>`;
   }
   if (d.step === 'suclama') {
     const voters = activePlayers(S);
@@ -525,7 +601,7 @@ function divanView() {
   }
   if (d.step === 'suclama-sonuc') {
     const r = d.result;
-    return `<h2>${title} · Çözüm</h2><p class="big ${r.ok ? 'ok' : 'no'}">${r.ok ? 'Doğru!' : 'Yanlış!'} ${r.ok ? '' : ''}</p>
+    return `<h2 class="m-title">${ico('lens')}${title} · Çözüm</h2>${head}<p class="big verdict-big ${r.ok ? 'ok' : 'no'}" role="status">${ico(r.ok ? 'check' : 'x')}${r.ok ? 'Doğru!' : 'Yanlış!'}</p>
       <div class="paper">${esc(r.solution)}</div>
       <p>${r.ok ? `Vaka çözüldü. ${r.methodOk ? 'Yöntem de doğru' : 'Yöntem yanlış'}${d.restored ? ': kayıp bir tılsım geri döndü.' : '.'} Her ${RULES.DELIL_PER_CASES} çözülen vaka Büyük Divan'da bir Delil pulu açar.` : 'Bir tılsım kayboldu.'}</p>
       <button class="btn gold" data-act="divan-next">${S.eraIndex < RULES.EXILE_FROM_ERA || S.exilesUsed >= RULES.EXILES_BEFORE_FINAL || !golgeler(S).length ? 'Devam' : (RULES.EXILE_MODE === 'gozalti' ? 'Gözaltı oylamasına geç' : 'Sürgün oylamasına geç')}</button>`;
@@ -537,7 +613,7 @@ function divanView() {
     return `<h2>${title}</h2>${d.skipExile ? `<p class="hint">${skip}</p>` : `<p class="paper">${esc(last?.text || '')}</p>`}
       <button class="btn gold" data-act="divan-next">Usturlabı çevir: sonraki perde</button>`;
   }
-  return `<h2>${title}</h2><p>…</p>`;
+  return `<h2 class="m-title">${title}</h2><p>…</p>`;
 }
 
 function voteView(title, final) {
@@ -555,11 +631,11 @@ function voteView(title, final) {
     <div class="votes">${voters.map((v) => {
       const has = v.id in d.votes;
       const val = d.votes[v.id];
-      return `<div class="vrow">${avatar(v)} <b>${esc(v.name)}</b> ${has ? `<span class="chip">${val === null ? 'Pas' : esc(player(S, val).name)}</span>` : v.isBot ? '<i>düşünüyor…</i>' : `
-        <span class="vbtns">${cands.filter((c) => c.id !== v.id).map((c) => `<button class="btn small" data-act="vote" data-voter="${v.id}" data-target="${c.id}">${esc(c.name)}</button>`).join('')}
+      return `<div class="vrow ${has ? 'done' : ''}">${avatar(v)} <b>${esc(v.name)}</b> ${has ? `<span class="chip vote-chip">${ico('check')}${val === null ? 'Pas' : esc(player(S, val).name)}</span>` : v.isBot ? '<i class="thinking-inline">düşünüyor<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></i>' : `
+        <span class="vbtns" role="group" aria-label="${esc(v.name)} oyu">${cands.filter((c) => c.id !== v.id).map((c) => `<button class="btn small" data-act="vote" data-voter="${v.id}" data-target="${c.id}">${esc(c.name)}</button>`).join('')}
         ${final ? '' : `<button class="btn small ghost" data-act="vote" data-voter="${v.id}" data-target="">Pas</button>`}</span>`}</div>`;
     }).join('')}</div>
-    <p class="hint">Oylar: ${Object.entries(tally).map(([id, n]) => `${esc(player(S, Number(id)).name)} ${n}`).join(' · ') || 'henüz yok'}</p>`;
+    <div class="tally" aria-label="Oy durumu">${Object.entries(tally).map(([id, n]) => `<div class="tl-row"><span>${esc(player(S, Number(id)).name)}</span><span class="tl-bar"><i style="width:${Math.round((n / Math.max(top, need)) * 100)}%"></i></span><b>${n}</b></div>`).join('') || '<p class="hint">Oylar: henüz yok</p>'}</div>`;
 }
 
 function overView() {
@@ -684,12 +760,14 @@ function pickNode(loc) {
 // ---------- ana çizim ----------
 function render() {
   let html;
-  if (!S) html = setupView() + (ui.modal ? modal(ui.modal()) : '');
+  if (!S && ui.landing) html = landingView(loadSaved()) + (ui.modal ? modal(ui.modal()) : '');
+  else if (!S) html = setupView() + (ui.modal ? modal(ui.modal()) : '');
   else if (S.phase === 'roles') html = roleView();
   else if (S.phase === 'prolog') html = storyView('assets/prolog.webp', 'Prolog · Bugün, Yerebatan', esc(PROLOG), 'Usturlabı çevir', 'begin');
   else if (S.phase === 'era-intro') html = eraIntroView();
   else html = gameView();
   app.innerHTML = html;
+  window.MUAMMA_audio?.setMood(!S || ['roles', 'prolog', 'era-intro'].includes(S.phase) ? 'menu' : S.phase === 'night' ? 'night' : 'game');
   syncBoard();
   activateFlips(app);
   const f = app.querySelector('[autofocus]');
@@ -722,6 +800,7 @@ app.addEventListener('click', (ev) => {
   const a = el.dataset.act;
   const cur = S && currentPlayer(S);
   switch (a) {
+    case 'land-start': ui.landing = false; return render();
     case 'start': return startNew();
     case 'resume': S = loadSaved(); ui.roleQueue = []; return render();
     case 'help': ui.modal = helpModal; return render();
@@ -763,6 +842,10 @@ app.addEventListener('click', (ev) => {
     case 'vote': return dispatch({ type: 'vote', playerId: Number(el.dataset.voter), target: el.dataset.target === '' ? null : Number(el.dataset.target) });
     default: return undefined;
   }
+});
+
+window.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && ui.modal) { ui.modal = null; render(); }
 });
 
 function nightNext() {
@@ -851,3 +934,4 @@ app.addEventListener('click', async (ev) => {
   render();
 });
 window.MUAMMA_canInstall = () => !!installPrompt;
+
