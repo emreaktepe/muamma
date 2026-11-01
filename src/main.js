@@ -8,6 +8,7 @@ import '@fontsource/courier-prime/400.css';
 import './styles.css';
 import './ui/flip.css';
 import './ui/components.css';
+import './ui/refined.css';
 
 import {
   createGame, startGame, act, era, caseOf, player, activePlayers, charOf, reachable, availableActions,
@@ -133,8 +134,7 @@ function setupView() {
       <h1>İstanbul'un Yedi Tılsımı</h1><p class="sub">Dijital prototip v0.2</p>
       <p>Dört çağ, dört cinayet ve aranızda gizlenen bir Gölge. Bu prototip kuralları denemek, dengeyi ölçmek ve oyunu birlikte anlamak için.</p>
     </div></div>
-    <div class="panel-card">
-      <h2>Masa</h2>
+    <section class="setup-art"><p class="eyebrow">İSTANBUL’UN YEDİ TILSIMI</p><h2>Sekiz yabancı.<br>Bir ortak sır.</h2><img src="assets/dizilis.webp" alt="MUAMMA’nın sekiz karakteri"><p>Dört çağ boyunca izleri takip et. Aranızdaki Gölge’yi bul.</p></section><div class="panel-card"><h2>Masanı kur</h2>
       <div class="row2">
         <label>Oyuncu sayısı <select data-in="count">${[4, 5, 6, 7, 8].map((n) => `<option ${n === st.count ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label>Mod <select data-in="mode">
@@ -158,14 +158,14 @@ function setupView() {
       <figure><img src="assets/kutu_3d.webp" alt="MUAMMA kutusu"><figcaption>Kutu</figcaption></figure>
       <figure><img src="assets/oynanis.webp" alt="Masada MUAMMA oynanışı"><figcaption>Masada oynanış</figcaption></figure>
     </div>
-    <img class="lineup" src="assets/dizilis.webp" alt="Sekiz karakterin dizilişi">
+
   </div>`;
 }
 
 function roleView() {
   if (!ui.roleQueue) ui.roleQueue = humans().map((p) => p.id);
   if (!ui.roleQueue.length) {
-    return `<div class="story"><img src="assets/kart_arkasi.webp" alt=""><div class="story-text">
+    return `<div class="story"><img src="assets/dizilis.webp" alt="Oyunun sekiz karakteri"><div class="story-text">
       <h2>Roller dağıtıldı</h2><p>${spectator() ? 'Bütün koltuklar bot. Oyunu seyirci olarak izleyeceksin; botların rolleri oyun sonunda açılacak.' : 'Herkes rolünü gördü. Şimdi Yerebatan Sarnıcı\'na iniyoruz.'}</p>
       <button class="btn gold" data-act="roles-done">Prologa geç</button></div></div>`;
   }
@@ -258,7 +258,7 @@ function izChips(iz) {
 
 function charCard(p, ctx = 'rol') {
   const c = charOf(p);
-  return `<div class="charcard">${flipCard({ id: fid('kart', ctx, p.id), cls: 'card-flip', delay: 250, toggle: true, label: 'Karakter kartını çevir', front: `<img src="assets/karakter_${c.id}.webp" alt="">` })}<div>
+  return `<div class="charcard">${flipCard({ id: fid('kart', ctx, p.id), cls: 'card-flip', delay: 250, toggle: true, label: 'Karakter kartını çevir', front: `<div class="named-card"><img src="assets/karakter_${c.id}.webp" alt="${esc(c.name)}"><div class="card-caption"><strong>${esc(c.name)}</strong><span>${esc(c.abilityName)}</span></div><p class="card-description">${esc(c.abilityText)}</p></div>` })}<div>
     <h3>${esc(c.name)}</h3><p class="era-tag">${esc(c.era)}</p>
     <p><b>${esc(c.abilityName)}:</b> ${esc(c.abilityText)}</p>
     <div class="chips">${izChips(c.iz)}</div></div></div>`;
