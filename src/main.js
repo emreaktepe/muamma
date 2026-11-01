@@ -5,6 +5,7 @@ import '@fontsource/cormorant-garamond/600.css';
 import '@fontsource/cormorant-garamond/700.css';
 import '@fontsource/courier-prime/400.css';
 import './styles.css';
+import './ui/flip.css';
 
 import {
   createGame, startGame, act, era, caseOf, player, activePlayers, charOf, reachable, availableActions,
@@ -17,6 +18,9 @@ import { CHARACTERS, CHAR_BY_ID, IZ_CATEGORIES } from './game/data/characters.js
 import { TILSIMLAR, LOCATIONS } from './game/data/locations.js';
 import { CASES } from './game/data/cases.js';
 import { boardSVG } from './ui/board.js';
+import { canUse3D, initialView, saveView } from './ui/view-mode.js';
+import { flipCard, activateFlips, initFlip, resetFlips } from './ui/flip.js';
+import { ANIM_MODES, ANIM_LABELS, getAnim, setAnim, applyAnim, watchSystemMotion } from './ui/anim.js';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'muamma-save-v1';
@@ -24,9 +28,12 @@ const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const DELAYS = { yavas: 1300, normal: 650, hizli: 140 };
 
 let S = null;
+const CAN3D = canUse3D();
 const ui = {
+  view: initialView(CAN3D),   // '3d' | 'basit' (3D tahta / Basit görünüm)
   setup: defaultSetup(),
   speed: 'normal',
+  anim: getAnim(),   // kart animasyonu: hizli | normal | kapali (ui/anim.js)
   tab: 'defter',
   modal: null,
   gate: {},          // gizli ekranlar için "yalnız X baksın" onayları
@@ -56,6 +63,7 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { /* */ 
 const humans = () => (S ? S.players.filter((p) => !p.isBot) : []);
 const multiHuman = () => humans().length > 1;
 const spectator = () => S && humans().length === 0;
+const fid = (...parts) => [S?.seed, ...parts].join(':');
 const avatar = (p, cls = '') => `<img class="av ${cls}" src="assets/avatar_${p.charId}.webp" alt="">`;
 const tilsimIcons = () => Object.keys(TILSIMLAR).map((l) => `<span class="ts ${S.tilsim[l] ? 'on' : 'off'}" title="${esc(TILSIMLAR[l])}">✦</span>`).join('');
 
@@ -113,6 +121,7 @@ function setupView() {
           <option value="cirak" ${st.mode === 'cirak' ? 'selected' : ''}>Çırak (Gölge yok, işbirlikçi)</option>
         </select></label>
         <label>Tohum <input data-in="seed" value="${st.seed}" inputmode="numeric" aria-label="Rastgelelik tohumu"></label>
+        <label>Kart animasyonu <select data-in="anim" aria-label="Kart animasyonu">${ANIM_MODES.map((k) => `<option value="${k}" ${ui.anim === k ? 'selected' : ''}>${ANIM_LABELS[k]}</option>`).join('')}</select></label>
         <label>Bot hızı <select data-in="speed">${Object.keys(DELAYS).map((k) => `<option value="${k}" ${ui.speed === k ? 'selected' : ''}>${{ yavas: 'Yavaş', normal: 'Normal', hizli: 'Hızlı' }[k]}</option>`).join('')}</select></label>
       </div>
       <p class="hint">Aynı cihazda birden çok insan oynuyorsa gizli ekranlar "Yalnız X baksın" onayıyla açılır. Herkesi bot yaparsan oyunu seyirci olarak izlersin.</p>
@@ -148,7 +157,7 @@ function roleView() {
   const c = charOf(p);
   const partner = p.role === 'golge' ? golgeler(S).filter((g) => g.id !== p.id) : [];
   return `<div class="reveal">
-    <img class="card-img" src="assets/rol_${p.role === 'golge' ? 'golge' : 'muhafiz'}.webp" alt="">
+    ${flipCard({ id: fid('rol', p.id), cls: 'card-flip', slow: true, toggle: true, label: 'Rol kartını çevir', front: `<img class="card-img" src="assets/rol_${p.role === 'golge' ? 'golge' : 'muhafiz'}.webp" alt="">` })}
     <div class="reveal-text">
       <h2>${p.role === 'golge' ? 'Sen GÖLGE\'sin' : 'Sen bir MUHAFIZ\'sın'}</h2>
       <p>${p.role === 'golge'
@@ -164,9 +173,9 @@ function izChips(iz) {
   return Object.entries(iz).map(([cat, v]) => `<span class="chip">${IZ_CATEGORIES[cat].label}: <b>${esc(v)}</b></span>`).join('');
 }
 
-function charCard(p) {
+function charCard(p, ctx = 'rol') {
   const c = charOf(p);
-  return `<div class="charcard"><img src="assets/karakter_${c.id}.webp" alt=""><div>
+  return `<div class="charcard">${flipCard({ id: fid('kart', ctx, p.id), cls: 'card-flip', delay: 250, toggle: true, label: 'Karakter kartını çevir', front: `<img src="assets/karakter_${c.id}.webp" alt="">` })}<div>
     <h3>${esc(c.name)}</h3><p class="era-tag">${esc(c.era)}</p>
     <p><b>${esc(c.abilityName)}:</b> ${esc(c.abilityText)}</p>
     <div class="chips">${izChips(c.iz)}</div></div></div>`;
@@ -200,6 +209,7 @@ function headerView() {
     <div class="meta">Çözülen vaka: <b>${S.solvedCases}</b> · Sürgün hakkı: <b>${Math.max(0, RULES.EXILES_BEFORE_FINAL - S.exilesUsed)}</b></div>
     <div class="tools">
       <select data-in="speed" aria-label="Bot hızı">${Object.keys(DELAYS).map((k) => `<option value="${k}" ${ui.speed === k ? 'selected' : ''}>${{ yavas: 'Yavaş', normal: 'Normal', hizli: 'Hızlı' }[k]}</option>`).join('')}</select>
+      ${CAN3D ? `<button class="btn small ghost view-toggle" data-act="view-toggle" aria-pressed="${ui.view === 'basit'}" title="3D masa görünümü ile düz tahta arasında geçiş">${ui.view === '3d' ? 'Basit görünüm' : '3D görünüm'}</button>` : ''}
       <button class="btn small ghost" data-act="help">Kurallar</button>
       <button class="btn small ghost" data-act="quit">Menü</button>
     </div>
@@ -270,7 +280,7 @@ function caseView() {
   }
   return `<div class="case">
     <p class="hint">Yalnız <b>doğrulanmış</b> bilgiler (Açık İnceleme ve bulmaca) sayılır. İddialar defterde.</p>
-    ${c.suspects.map((x) => `<div class="sus ${alibi.has(x.id) ? 'alibi' : ''}"><b>${esc(x.name)}</b> ${alibi.has(x.id) ? '<span class="chip">Aklandı</span>' : ''}${points[x.id] ? `<span class="chip warn">${points[x.id]} işaret</span>` : ''}<p>${esc(x.desc)}</p></div>`).join('')}
+    ${c.suspects.map((x, i) => flipCard({ id: fid('sus', yr, x.id), cls: 'sus-flip', delay: i * 120, front: `<div class="sus ${alibi.has(x.id) ? 'alibi' : ''}"><b>${esc(x.name)}</b> ${alibi.has(x.id) ? '<span class="chip">Aklandı</span>' : ''}${points[x.id] ? `<span class="chip warn">${points[x.id]} işaret</span>` : ''}<p>${esc(x.desc)}</p></div>` })).join('')}
     <p class="hint">Yöntem seçenekleri: ${c.methods.map((m) => esc(m.label)).join(' · ')}</p>
   </div>`;
 }
@@ -280,7 +290,7 @@ function suspectTable() {
   const cats = Object.keys(IZ_CATEGORIES);
   const evText = ev.map((e) => e.kind === 'must'
     ? `${IZ_CATEGORIES[e.cat].label} = ${e.val}`
-    : e.items.map((x) => `${IZ_CATEGORIES[x.cat].label} ${x.val}`).join(' ya da ')).map((t) => `<span class="chip">${esc(t)}</span>`).join('');
+    : e.items.map((x) => `${IZ_CATEGORIES[x.cat].label} ${x.val}`).join(' ya da ')).map((t) => flipCard({ id: fid('iz', t), tag: 'span', front: `<span class="chip">${esc(t)}</span>` })).join('');
   return `<div class="case">
     <p class="hint">Katilin izleri (kamuya açık): ${evText || 'henüz yok'}</p>
     <table class="iz"><thead><tr><th>Oyuncu</th>${cats.map((c) => `<th>${IZ_CATEGORIES[c].label}</th>`).join('')}<th>Uyum</th></tr></thead><tbody>
@@ -306,10 +316,10 @@ function sidePanel() {
 
 function gameView() {
   const p = currentPlayer(S);
-  const reach = p && !p.isBot && S.phase === 'day' && !S.pending ? reachable(S, p) : {};
+  const reach = reachNow();
   return `${headerView()}
     <main class="game">
-      <section class="boardwrap">${boardSVG(S, { reach, currentId: p?.id })}
+      <section class="boardwrap">${boardHTML(reach, p?.id)}
         <div class="legend"><span><i class="lg-star"></i>Tılsım</span><span><i class="lg-x"></i>Ceset</span><span><i class="lg-sea"></i>Deniz yolu (Yürü'nün tamamı)</span>${era(S).id === 'bugun' ? '<span><i class="lg-rail"></i>Marmaray</span>' : ''}</div>
         ${ui.error ? `<p class="error">${esc(ui.error)}</p>` : ''}
       </section>
@@ -341,7 +351,7 @@ function claimView(p) {
   if (gateNeeded(key)) return gateView(key, p, 'Gizli İnceleme sonucu.');
   const pd = S.pending;
   return `<h2>Gizli İnceleme · ${esc(locName(S, pd.loc))}</h2>
-    <div class="paper">${esc(pd.text)}</div>
+    ${flipCard({ id: fid('claim', S.defter.length, p.id), cls: 'paper-flip', front: `<div class="paper">${esc(pd.text)}</div>` })}
     <p class="hint">Masaya ne söyleyeceksin? Defterde "iddia" olarak görünür. Biri burayı Açık İnceleme ile okursa yalanın ortaya çıkar.</p>
     <div class="claims">
       <button class="btn gold" data-act="claim" data-claim="dogru">Doğruyu söyle<br><small>${esc(pd.trueSummary)}</small></button>
@@ -354,7 +364,7 @@ function puzzleModal() {
   const p = currentPlayer(S);
   const puz = puzzleAt(S, p.loc);
   return `<h2>Bulmaca · ${esc(puz.title)}</h2>
-    <div class="paper">${esc(puz.text)}</div>
+    ${flipCard({ id: fid('bulmaca', puz.id ?? puz.title, S.eraIndex), cls: 'paper-flip', front: `<div class="paper">${esc(puz.text)}</div>` })}
     ${p.charId === 'zeynep' ? `<p class="hint">Hat Bilgisi ipucu: ${esc(puz.hint)}</p>` : ''}
     <form data-form="solve" class="solve"><input name="answer" autocomplete="off" placeholder="Cevabın" aria-label="Cevap" autofocus>
     <button class="btn gold">Cevapla</button><button type="button" class="btn ghost" data-act="close">Vazgeç</button></form>
@@ -376,7 +386,7 @@ function notesModal() {
   const notes = S.private[p.id] || [];
   return `<h2>${esc(p.name)} · gizli notlar</h2>
     <p>Rolün: <b>${p.role === 'golge' ? 'GÖLGE' : 'Muhafız'}</b>${p.role === 'golge' && golgeler(S).length > 1 ? ' · Ortak: ' + golgeler(S).filter((g) => g.id !== p.id).map((g) => esc(g.name)).join(', ') : ''}</p>
-    ${charCard(p)}
+    ${charCard(p, 'notlar')}
     <div class="defter">${notes.map((n) => `<div class="entry"><span class="when">${esc(n.era)} · G${n.day}</span><p>${esc(n.text)}</p></div>`).join('') || '<p class="hint">Henüz gizli not yok.</p>'}</div>
     <button class="btn gold" data-act="close">Kapat</button>`;
 }
@@ -447,7 +457,7 @@ function divanView() {
     const killer = player(S, r.killedBy);
     return `<h2>${title} · Ruh</h2><img class="ruh-img" src="assets/rol_ruh.webp" alt="">
       <p>${esc(r.name)}, seni <b>${esc(killer.name)}</b> öldürdü. Konuşamazsın; masaya bir rüya göster. Yalnız katiline en az bir simgesi uyan rüyaları seçebilirsin.</p>
-      <div class="claims">${d.cards.map((card, i) => `<button class="btn ${card.valid ? 'gold' : ''}" data-act="ruh" data-card="${i}" ${card.valid ? '' : 'disabled'}>${card.symbols.map((x) => `${IZ_CATEGORIES[x.cat].label}: <b>${esc(x.val)}</b>`).join('<br>')}</button>`).join('')}</div>`;
+      <div class="claims">${d.cards.map((card, i) => flipCard({ id: fid('ruh', S.eraIndex, r.id, i), delay: i * 140, front: `<button class="btn ${card.valid ? 'gold' : ''}" data-act="ruh" data-card="${i}" ${card.valid ? '' : 'disabled'}>${card.symbols.map((x) => `${IZ_CATEGORIES[x.cat].label}: <b>${esc(x.val)}</b>`).join('<br>')}</button>` })).join('')}</div>`;
   }
   if (d.step === 'suclama') {
     const sug = botAccuse(S, activePlayers(S).find((p) => p.isBot && p.role !== 'golge')?.id);
@@ -483,7 +493,7 @@ function voteView(title, final) {
   const cands = activePlayers(S);
   const tally = voteTally(S);
   return `<h2>${title} · ${final ? 'Gölge kim?' : 'Sürgün oylaması'}</h2>
-    ${final ? `<p>Delil Kutusu açıldı. ${S.delilRevealed.length ? 'Açılan pullar: ' + S.delilRevealed.map((x) => `<span class="chip">${IZ_CATEGORIES[x.cat].label}: ${esc(x.val)}</span>`).join(' ') : 'Hiç pul açılmadı.'}</p>` : `<p>Biri Gölge mi? Çoğunluk (${Math.floor(voters.length / 2) + 1} oy) bir kişiyi sürerse rol kartı açılır. Masum biri sürülürse bir tılsım kaybolur. "Pas" da geçerli bir oydur.</p>`}
+    ${final ? `<p>Delil Kutusu açıldı. ${S.delilRevealed.length ? 'Açılan pullar: ' + S.delilRevealed.map((x, i) => flipCard({ id: fid('delil', x.cat, x.val), tag: 'span', delay: i * 180, front: `<span class="chip">${IZ_CATEGORIES[x.cat].label}: ${esc(x.val)}</span>` })).join(' ') : 'Hiç pul açılmadı.'}</p>` : `<p>Biri Gölge mi? Çoğunluk (${Math.floor(voters.length / 2) + 1} oy) bir kişiyi sürerse rol kartı açılır. Masum biri sürülürse bir tılsım kaybolur. "Pas" da geçerli bir oydur.</p>`}
     ${suspectTable()}
     <div class="votes">${voters.map((v) => {
       const has = v.id in d.votes;
@@ -500,9 +510,71 @@ function overView() {
   return `<div class="over ${win ? 'win' : 'lose'}">
     <img src="assets/${win ? 'rol_muhafiz' : 'rol_golge'}.webp" alt="">
     <div><h2>${win ? 'Muhafızlar kazandı' : 'Gölge kazandı'}</h2><p class="paper">${esc(S.winReason)}</p>
-    <h3>Roller</h3><div class="plist">${S.players.map((p) => `<div class="pl">${avatar(p)}<div><b>${esc(p.name)}</b><br><span>${esc(charOf(p).name)}</span></div><em class="${p.role}">${p.role === 'golge' ? 'GÖLGE' : 'Muhafız'}</em></div>`).join('')}</div>
+    <h3>Roller</h3><div class="plist">${S.players.map((p) => `<div class="pl">${avatar(p)}<div><b>${esc(p.name)}</b><br><span>${esc(charOf(p).name)}</span></div>${flipCard({ id: fid('son', p.id), tag: 'span', slow: p.role === 'golge', delay: p.role === 'golge' ? 500 : 0, front: `<em class="${p.role}">${p.role === 'golge' ? 'GÖLGE' : 'Muhafız'}</em>` })}</div>`).join('')}</div>
     <p>Çözülen vaka: <b>${S.solvedCases}</b> · Kalan tılsım: <b>${tilsimCount(S)}</b> · Cinayet: <b>${S.bodies.length}</b> · Tohum: <b>${S.seed}</b></p>
     <div class="btns"><button class="btn gold" data-act="replay">Aynı masayla yeni oyun</button><button class="btn" data-act="quit">Ana menü</button></div></div></div>`;
+}
+
+// ---------- 3D tahta (ui/board3d, dinamik yüklenir; WebGL yoksa SVG yedeği) ----------
+let b3 = null;          // board3d denetleyicisi
+let b3mod = null;       // yüklenen modül
+let b3state = 'idle';   // idle | loading | ready | failed
+const want3D = () => ui.view === '3d' && b3state !== 'failed';
+const use3D = () => want3D() && b3state === 'ready';
+
+function fallbackTo2D(msg) {
+  b3state = 'failed';
+  ui.view = 'basit';   // geçici düşüş; kullanıcı tercihi (localStorage) değişmez
+  if (msg) ui.error = msg;
+  try { b3?.dispose(); } catch { /* */ }
+  b3 = null;
+  render();
+}
+function loadBoard3D() {
+  if (b3state !== 'idle') return;
+  b3state = 'loading';
+  import('./ui/board3d.js')
+    .then(async (m) => {
+      b3mod = m;
+      b3 = await m.createBoard3D({
+        onPick: pickNode,
+        onLost: () => fallbackTo2D('3D görünümde grafik bağlamı kayboldu; Basit görünüme geçildi.'),
+      });
+      b3state = 'ready';
+      render();
+    })
+    .catch(() => fallbackTo2D());
+}
+function toggleView() {
+  ui.view = ui.view === '3d' ? 'basit' : '3d';
+  saveView(ui.view);
+  if (ui.view === '3d' && b3state === 'failed') b3state = 'idle';
+  render();
+}
+function reachNow() {
+  const p = currentPlayer(S);
+  return p && !p.isBot && S.phase === 'day' && !S.pending ? reachable(S, p) : {};
+}
+function boardHTML(reach, currentId) {
+  if (use3D()) return `<div data-board-slot></div>${b3mod.a11yHTML(S, { reach, currentId })}`;
+  if (want3D()) { loadBoard3D(); return '<div class="stage-loading" role="status">Tahta yükleniyor…</div>'; }
+  return boardSVG(S, { reach, currentId });
+}
+function syncBoard() {
+  if (!b3) return;
+  const slot = S ? app.querySelector('[data-board-slot]') : null;
+  if (!use3D() || !slot) { b3.detach(); return; }
+  const p = currentPlayer(S);
+  b3.attach(slot);
+  const motion = ui.anim === 'normal' && ui.speed === 'hizli' ? 'hizli' : ui.anim;
+  b3.update(S, { reach: reachNow(), currentId: p?.id, motion, gameKey: S.seed });
+}
+// 2D (data-act="node") ve 3D (ışın) aynı kuralı çalıştırır
+function pickNode(loc) {
+  const cur = S && currentPlayer(S);
+  if (!cur || cur.isBot || S.pending) return undefined;
+  if (loc in reachable(S, cur)) return dispatch({ type: 'move', playerId: cur.id, to: loc });
+  return undefined;
 }
 
 // ---------- ana çizim ----------
@@ -514,6 +586,8 @@ function render() {
   else if (S.phase === 'era-intro') html = eraIntroView();
   else html = gameView();
   app.innerHTML = html;
+  syncBoard();
+  activateFlips(app);
   const f = app.querySelector('[autofocus]');
   if (f) f.focus();
   pump();
@@ -556,11 +630,8 @@ app.addEventListener('click', (ev) => {
     case 'roles-done': startGame(S); save(); return render();
     case 'begin': return dispatch({ type: 'begin' });
     case 'start-days': return dispatch({ type: 'start-days' });
-    case 'node': {
-      if (!cur || cur.isBot || S.pending) return;
-      if (el.dataset.loc in reachable(S, cur)) return dispatch({ type: 'move', playerId: cur.id, to: el.dataset.loc });
-      return;
-    }
+    case 'node': return pickNode(el.dataset.loc);
+    case 'view-toggle': return toggleView();
     case 'gizli': return dispatch({ type: 'investigate', playerId: cur.id, mode: 'gizli' });
     case 'acik': return dispatch({ type: 'investigate', playerId: cur.id, mode: 'acik' });
     case 'sorgula': return dispatch({ type: 'question', playerId: cur.id });
@@ -622,6 +693,7 @@ app.addEventListener('change', (ev) => {
   else if (k === 'mode') st.mode = el.value;
   else if (k === 'seed') st.seed = Number(el.value) || 1;
   else if (k === 'speed') ui.speed = el.value;
+  else if (k === 'anim') { ui.anim = setAnim(el.value); return; }
   else if (k === 'name') st.rows[i].name = el.value;
   else if (k === 'bot') st.rows[i].isBot = el.value === '1';
   else if (k === 'char') st.rows[i].charId = el.value;
@@ -635,6 +707,7 @@ function startNew() {
   const chars = rows.map((r) => r.charId).filter(Boolean);
   if (new Set(chars).size !== chars.length) { ui.error = 'Aynı karakter iki oyuncuya verilemez.'; alertSetup(); return; }
   S = createGame({ seed: st.seed, mode: st.mode, players: rows.map((r) => ({ name: r.name.trim() || 'Oyuncu', isBot: r.isBot, charId: r.charId || undefined })) });
+  resetFlips();
   ui.roleQueue = null; ui.roleShown = false; ui.gate = {}; ui.night = null; ui.modal = null; ui.tab = 'defter'; ui.error = null;
   save();
   render();
@@ -646,6 +719,15 @@ function alertSetup() {
   p.textContent = ui.error;
   app.querySelector('.panel-card')?.prepend(p);
 }
+
+// Test ve hata ayıklama için konsoldan erişim
+applyAnim();
+watchSystemMotion();
+initFlip();
+
+window.MUAMMA = { get state() { return S; }, CASES, LOCATIONS, CHAR_BY_ID, paragraphAt, abilityUsable };
+
+render();
 
 // Uygulama olarak yüklenebilsin diye service worker (yalnız yayınlanan sürümde)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -663,8 +745,3 @@ app.addEventListener('click', async (ev) => {
   render();
 });
 window.MUAMMA_canInstall = () => !!installPrompt;
-
-// Test ve hata ayıklama için konsoldan erişim
-window.MUAMMA = { get state() { return S; }, CASES, LOCATIONS, CHAR_BY_ID, paragraphAt, abilityUsable };
-
-render();

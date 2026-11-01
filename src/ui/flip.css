@@ -1,0 +1,78 @@
+/* Kart çevirme (DOM, CSS 3D). Hız: <html data-anim="hizli|normal|kapali"> ve --anim-scale (anim.js). */
+.flip {
+  --dur: calc(700ms * var(--anim-scale, 1));
+  perspective: 900px;
+  display: block;
+  position: relative;
+  border-radius: 10px;
+}
+.flip.slow { --dur: calc(1100ms * var(--anim-scale, 1)); }
+span.flip { display: inline-block; vertical-align: middle; perspective: 400px; border-radius: 999px; }
+
+.flip-tilt {
+  display: block;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform .18s ease-out;
+  border-radius: inherit;
+}
+.flip-inner {
+  display: block;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateY(180deg);
+  transition: transform var(--dur) cubic-bezier(.3, .7, .2, 1) var(--flip-delay, 0ms);
+  border-radius: inherit;
+}
+.flip.is-flipped .flip-inner { transform: rotateY(0deg); }
+
+.flip-face {
+  display: block;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: inherit;
+}
+.flip-front {
+  position: relative;
+  /* Arka yüz görünürken ön yüz odaklanılamaz/okunamaz; geçiş yarı sürede değişir. */
+  visibility: hidden;
+  transition: visibility 0s linear calc(var(--flip-delay, 0ms) + var(--dur) / 2);
+  filter: drop-shadow(calc(var(--sx, 0) * 1px) calc(var(--sy, 6) * 1px) 8px rgba(0, 0, 0, .45));
+}
+.flip.is-flipped .flip-front { visibility: visible; }
+.flip-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+}
+.flip .flip-back > img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; pointer-events: none; }
+
+/* Geri çevrilebilir kartlar (klavye: Enter / Boşluk) */
+.flip[data-flip-toggle] { cursor: pointer; }
+.flip[data-flip-toggle]:focus-visible { outline: 3px solid var(--gold, #d9b45a); outline-offset: 3px; }
+
+/* Izgara/düğme içinde tam yükseklik */
+.claims > .flip { height: 100%; }
+.claims > .flip .flip-tilt, .claims > .flip .flip-inner, .claims > .flip .flip-front { height: 100%; }
+.claims > .flip .flip-front > .btn { height: 100%; width: 100%; box-sizing: border-box; }
+.flip.paper-flip { margin: 0 0 10px; }
+.flip.paper-flip .flip-front > .paper { margin: 0; }
+.flip.sus-flip { margin-bottom: 6px; }
+.flip.sus-flip .flip-front > .sus { margin-bottom: 0; }
+.flip.card-flip .flip-front > img { width: 100%; display: block; }
+
+/* "Kapalı" ayarı ve sistem hareketi azalt tercihi: anında, eğim yok */
+:root[data-anim="kapali"] .flip-inner,
+:root[data-anim="kapali"] .flip-tilt,
+:root[data-anim="kapali"] .flip-front { transition: none !important; }
+:root[data-anim="kapali"] .flip-tilt { transform: none !important; }
+:root[data-anim="kapali"] .flip-front { filter: none; }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-anim="normal"]):not([data-anim="hizli"]) .flip-inner,
+  :root:not([data-anim="normal"]):not([data-anim="hizli"]) .flip-tilt,
+  :root:not([data-anim="normal"]):not([data-anim="hizli"]) .flip-front { transition: none !important; }
+  :root:not([data-anim="normal"]):not([data-anim="hizli"]) .flip-tilt { transform: none !important; }
+}
+@media (hover: none) { .flip-tilt { transform: none; } }
