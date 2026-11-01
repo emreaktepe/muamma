@@ -25,12 +25,17 @@ await page.click('[data-act="start"]');
 const shot = async (name) => page.screenshot({ path: `${out}/${name}.png` });
 const taken = new Set();
 const once = async (name) => { if (!taken.has(name)) { taken.add(name); await shot(name); } };
-const click = async (sel) => { const el = await page.$(sel); if (el && await el.isEnabled()) { await el.click(); return true; } return false; };
+const click = async (sel) => { try { const el = await page.$(sel); if (el && await el.isEnabled()) { await el.click({ timeout: 2000 }); return true; } } catch { /* yeniden çizildi, sonraki turda dene */ } return false; };
 
 let steps = 0;
 while (steps++ < 900) {
   await page.waitForTimeout(120);
-  if (await page.$('.over')) { await shot('99_son'); break; }
+  if (await page.$('.over')) {
+    await shot('99_son');
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }).catch(() => null), click('[data-act="report-md"]')]);
+    if (dl) { await dl.saveAs(`${out}/rapor.md`); } else errors.push('rapor indirilemedi');
+    break;
+  }
   if (await page.$('[data-act="role-show"]')) { await click('[data-act="role-show"]'); await once('02_rol'); continue; }
   if (await click('[data-act="role-hide"]')) continue;
   if (await click('[data-act="roles-done"]')) continue;
@@ -49,6 +54,12 @@ while (steps++ < 900) {
     continue;
   }
   if (await click('[data-act="night-next"]')) continue;
+  if (await page.$('.ruh-panel')) {
+    await once('05c_ruh_perili');
+    const n = await page.$('.node.reach');
+    if (n) await n.click(); else await click('[data-act="end-turn"]');
+    continue;
+  }
   if (await page.$('[data-act="ruh"]')) { await click('[data-act="ruh"]:not([disabled])'); continue; }
   if (await page.$('form[data-form="accuse"]')) { await once('09_divan_suclama'); await click('form[data-form="accuse"] button'); continue; }
   if (await page.$('[data-act="vote"]')) { await once('10_oylama'); await click('[data-act="vote"][data-target=""]') || await click('[data-act="vote"]'); continue; }

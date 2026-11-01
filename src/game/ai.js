@@ -2,6 +2,7 @@
 import {
   caseOf, era, player, activePlayers, charOf, reachable, distances, availableActions, paragraphAt,
   puzzleAt, bodyAt, nightOptions, publicEvidence, consistentWith, isActive, rand, pick, golgeler, abilityUsable,
+  isEvil, isRuh, eraDays, hauntOptions, missionProgress,
 } from './engine.js';
 import { CASES } from './data/cases.js';
 import { IZ_CATEGORIES } from './data/characters.js';
@@ -43,9 +44,10 @@ export function botDayAction(s, p) {
   const pd = s.pending;
   if (pd?.type === 'claim' && pd.playerId === p.id) return { type: 'claim', playerId: p.id, claim: botClaim(s, p) };
   const av = availableActions(s, p);
+  if (av.ruh) return { type: 'haunt', playerId: p.id, loc: botHauntLoc(s, p) };
   const here = p.loc;
   const known = s.knowledge[p.id];
-  const golge = p.role === 'golge';
+  const golge = isEvil(p);
 
   // Yetenekler
   if (av.yetenek) {
@@ -83,8 +85,9 @@ export function botDayAction(s, p) {
     let targets = goals(s, p);
     if (golge) {
       // Gölge: yalnız kalan bir Muhafız'a ya da korunmasız bir tılsıma yakın dur
-      const lonely = activePlayers(s).filter((o) => o.role !== 'golge' && activePlayers(s).filter((x) => x.loc === o.loc).length === 1);
-      const exposed = Object.keys(s.tilsim).filter((l) => s.tilsim[l] && !s.protectedTilsim[l]);
+      const lonely = activePlayers(s).filter((o) => !isEvil(o) && activePlayers(s).filter((x) => x.loc === o.loc).length === 1);
+      const mission = s.mission?.tilsim && p.role === 'golge' ? s.mission.tilsim.filter((l) => s.tilsim[l]) : [];
+      const exposed = mission.length ? mission : Object.keys(s.tilsim).filter((l) => s.tilsim[l] && !s.protectedTilsim[l]);
       targets = rand(s) < 0.5 && targets.length ? targets : [...lonely.map((o) => o.loc), ...exposed];
     } else if (!targets.length) {
       targets = Object.keys(s.tilsim).filter((l) => s.tilsim[l] && !activePlayers(s).some((o) => o.loc === l));
@@ -96,13 +99,23 @@ export function botDayAction(s, p) {
   return { type: 'end-turn', playerId: p.id };
 }
 
+function botHauntLoc(s, p) {
+  const opts = hauntOptions(s);
+  if (p.killedBy !== null && p.killedBy !== undefined) {
+    const k = player(s, p.killedBy);
+    if (isActive(k) && opts.includes(k.loc)) return k.loc;
+  }
+  const exposed = opts.filter((l) => s.tilsim[l] && !activePlayers(s).some((o) => o.loc === l));
+  return exposed.length ? pick(s, exposed) : pick(s, opts);
+}
+
 function botClaim(s, p) {
-  if (p.role !== 'golge') return 'dogru';
+  if (!isEvil(p)) return 'dogru';
   const pd = s.pending;
   const c = caseOf(s);
   const pointsToCulprit = !c.dynamic && pd.truth.points?.[c.solution.suspect];
   // Başka biri aynı mekânı açıkça inceleyebilecek yakınlıktaysa yalan risklidir.
-  const watchers = activePlayers(s).filter((o) => o.id !== p.id && o.role !== 'golge' && distances(s, o.loc)[pd.loc] <= 1).length;
+  const watchers = activePlayers(s).filter((o) => o.id !== p.id && !isEvil(o) && distances(s, o.loc)[pd.loc] <= 1).length;
   const lieChance = watchers ? 0.15 : 0.45;
   if (c.dynamic) return rand(s) < lieChance ? 'sahte' : 'dogru';
   if (pointsToCulprit) return rand(s) < lieChance ? 'sahte' : 'dogru';
@@ -114,18 +127,25 @@ const THREAT = { riza: 3, eleni: 3, nevres: 2, deniz: 1, agop: 1 };
 
 export function botNight(s) {
   const o = nightOptions(s);
-  const lastDay = s.day >= era(s).days;
+  const lastDay = s.day >= eraDays(s);
+  const m = s.mission;
+  // Görevdeki tılsım ulaşılabilirse önce onu çal
+  if (m?.tilsim) {
+    const target = o.steals.find((x) => m.tilsim.includes(x.loc));
+    if (target) return { type: 'night', action: 'steal', loc: target.loc };
+  }
   // Yalnız izini paylaşan masum biri masadaysa öldür: aksi hâlde iz doğrudan onu gösterir.
   const safeKills = o.kills.filter((k) => hasTwinCover(s, k.by, k.target));
-  if (safeKills.length && (lastDay ? rand(s) < 0.75 : rand(s) < 0.15)) {
+  const eager = m?.ruhs ? 0.5 : 0.15;
+  if (safeKills.length && (lastDay ? rand(s) < 0.75 : rand(s) < eager)) {
     const best = safeKills.map((k) => ({ ...k, w: (THREAT[player(s, k.target).charId] || 0) + rand(s) * 2 }))
       .sort((a, b) => b.w - a.w)[0];
     return { type: 'night', action: 'kill', target: best.target, cat: botIzChoice(s, best.by, best.target) };
   }
   if (o.steals.length && rand(s) < 0.8) return { type: 'night', action: 'steal', loc: pick(s, o.steals).loc };
-  if (o.fakes.length && rand(s) < 0.6) {
+  if (o.fakes.length && (caseOf(s).dynamic || rand(s) < 0.6)) {
     const c = caseOf(s);
-    const prefer = o.fakes.filter((l) => c.clues?.[l]);
+    const prefer = o.fakes.filter((l) => c.clues?.[l] || (c.dynamic && !s.defter.some((e) => e.loc === l && e.era === 'Bugün' && e.type === 'acik')));
     return { type: 'night', action: 'fake', loc: pick(s, prefer.length ? prefer : o.fakes) };
   }
   return { type: 'night', action: 'pas' };
@@ -134,14 +154,14 @@ export function botNight(s) {
 // Gölge izini, aynı değeri taşıyan masum bir oyuncuya şüphe düşürecek şekilde seçer.
 function hasTwinCover(s, golgeId, victimId) {
   const iz = charOf(player(s, golgeId)).iz;
-  return Object.keys(iz).some((cat) => activePlayers(s).some((o) => o.id !== golgeId && o.id !== victimId && o.role !== 'golge' && charOf(o).iz[cat] === iz[cat]));
+  return Object.keys(iz).some((cat) => activePlayers(s).some((o) => o.id !== golgeId && o.id !== victimId && !isEvil(o) && charOf(o).iz[cat] === iz[cat]));
 }
 
 export function botIzChoice(s, golgeId, victimId) {
   const g = player(s, golgeId);
   const iz = charOf(g).iz;
   const cats = Object.keys(iz).map((cat) => {
-    const twin = activePlayers(s).find((o) => o.id !== g.id && o.id !== victimId && o.role !== 'golge' && charOf(o).iz[cat] === iz[cat]);
+    const twin = activePlayers(s).find((o) => o.id !== g.id && o.id !== victimId && !isEvil(o) && charOf(o).iz[cat] === iz[cat]);
     return { cat, w: (twin ? 2 : 0) + rand(s) };
   });
   return cats.sort((a, b) => b.w - a.w)[0].cat;
@@ -176,6 +196,16 @@ export function caseScores(s, viewerId) {
     if (!liar) add(cl.info, 0.6);
   }
   return { score, alibi, methods };
+}
+
+export function botAccuseVote(s, p) {
+  const honest = botAccuse(s, p.id);
+  if (!isEvil(p)) return honest;
+  const c = caseOf(s);
+  const lieRate = s.mission?.wrongCases ? 0.85 : 0.5;
+  if (rand(s) >= lieRate) return honest;
+  const wrong = c.suspects.filter((x) => x.id !== c.solution.suspect);
+  return { suspect: pick(s, wrong).id, method: honest.method };
 }
 
 export function botAccuse(s, viewerId) {
@@ -215,9 +245,9 @@ export function suspicion(s, viewerId) {
 
 export function botVote(s, p) {
   const final = s.divan.step === 'final-oy';
-  if (p.role === 'golge') {
+  if (isEvil(p)) {
     const sus = suspicion(s, -1);
-    const innocents = activePlayers(s).filter((o) => o.role !== 'golge');
+    const innocents = activePlayers(s).filter((o) => !isEvil(o));
     const t = innocents.sort((a, b) => (sus[b.id] || 0) - (sus[a.id] || 0))[0];
     if (!t) return null;
     return final || (sus[t.id] || 0) >= 2 ? t.id : null;
@@ -251,6 +281,10 @@ export function botTurn(s) {
     if (d.step === 'ruh') {
       const r = player(s, d.ruhQueue[0]);
       if (r.isBot) return { type: 'ruh-hint', playerId: r.id, card: botRuhCard(s) };
+    }
+    if (d.step === 'suclama') {
+      const next = activePlayers(s).find((q) => q.isBot && !(q.id in d.accuseVotes));
+      if (next) return { type: 'accuse-vote', playerId: next.id, ...botAccuseVote(s, next) };
     }
     if (d.step === 'surgun' || d.step === 'final-oy') {
       const next = activePlayers(s).find((q) => q.isBot && !(q.id in d.votes));

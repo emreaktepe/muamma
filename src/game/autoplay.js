@@ -1,6 +1,6 @@
 // Bütün koltuklar bot olduğunda oyunu bir adım ilerletir (simülasyon ve testler için).
 import { act, startGame, era } from './engine.js';
-import { botTurn, botAccuse } from './ai.js';
+import { botTurn } from './ai.js';
 
 export function stepAuto(s) {
   switch (s.phase) {
@@ -10,7 +10,6 @@ export function stepAuto(s) {
     case 'morning': act(s, { type: 'morning-done' }); return true;
     case 'divan': {
       const d = s.divan;
-      if (d.step === 'suclama') { act(s, { type: 'accuse', ...botAccuse(s) }); return true; }
       if (d.step === 'suclama-sonuc' || d.step === 'sonuc') { act(s, { type: 'divan-next' }); return true; }
       break;
     }
