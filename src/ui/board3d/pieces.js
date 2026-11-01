@@ -84,11 +84,12 @@ export class Pieces {
   // ---- piyon ----
   makePawn(p) {
     const g = new Group();
+    const inner = new Group(); inner.scale.setScalar(0.7); g.add(inner); // piyon, harita dairelerine göre küçük dursun
     const col = PLAYER_COLORS[p.id % PLAYER_COLORS.length];
     const baseMat = new MeshStandardMaterial({ color: col, roughness: 0.4, metalness: 0.2, transparent: true });
     const base = new Mesh(this.geo.base, baseMat);
     base.position.y = 0.05; base.castShadow = true; base.receiveShadow = true;
-    g.add(base);
+    inner.add(base);
     const faceMat = new MeshStandardMaterial({ map: this.avatar(p.charId), roughness: 0.5, transparent: true });
     const sideMat = this.mat.pawnSide.clone(); sideMat.transparent = true;
     const stand = new Group();
@@ -99,13 +100,13 @@ export class Pieces {
     stand.position.set(0, 0.33, 0);
     stand.rotation.x = Math.PI / 2 - 0.62; // yüz, kameraya doğru eğik
     stand.rotation.order = 'XYZ';
-    g.add(stand);
+    inner.add(stand);
     // taşıyıcı ayak
     const post = new Mesh(new CylinderGeometry(0.03, 0.03, 0.18, 8), sideMat);
-    post.position.y = 0.17; g.add(post);
+    post.position.y = 0.17; inner.add(post);
     const ring = new Mesh(this.geo.ring, this.mat.ring);
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.1; ring.visible = false;
-    g.add(ring);
+    inner.add(ring);
     g.userData = { baseMat, faceMat, sideMat, ring, stand };
     this.parent.add(g);
     return g;

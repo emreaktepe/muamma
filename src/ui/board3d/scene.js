@@ -1,19 +1,17 @@
-// Sahne: masa, çerçeve, ışık, su/tekneler, simgesel yapılar, kamera (giriş animasyonu + yumuşak sınırlı orbit),
-// ışın ile mekân seçimi. Render döngüsü: etkileşim/animasyon varken sürekli, aksi halde dururken sıfır iş.
+// Sahne: masa, çerçeve, ışık, hazır harita görseli (tahta düzlemi), mekân etiketleri/kapakları, kamera (giriş animasyonu +
+// yumuşak sınırlı orbit), ışın ile mekân seçimi. Render döngüsü: etkileşim/animasyon varken sürekli, aksi halde dururken sıfır iş.
 import {
   WebGLRenderer, Scene, PerspectiveCamera, Color, Fog, SpotLight, HemisphereLight, DirectionalLight, PlaneGeometry,
   MeshStandardMaterial, MeshBasicMaterial, Mesh, CanvasTexture, SRGBColorSpace, PCFShadowMap, ACESFilmicToneMapping,
   Raycaster, Plane, Vector2, Vector3, RingGeometry, CircleGeometry, RepeatWrapping, AdditiveBlending, Group, ConeGeometry,
+  TextureLoader, LinearMipmapLinearFilter,
 } from 'three';
-import { LOCATIONS } from '../../game/data/locations.js';
 import { isOpen } from '../../game/engine.js';
-import { SCALE, BOARD_W, BOARD_H, toWorld, toBoard } from './model.js';
-import { drawBoardTexture, drawWoodTexture, drawVignette, drawGlow, TEX_SCALE } from './texture.js';
+import { SCALE, BOARD_W, BOARD_H, MAP_IMG, LOC_UV, toUV, uvToWorld } from './model.js';
+import { drawWoodTexture, drawVignette, drawGlow, drawLabel, labelName, LABEL_CW, LABEL_CH, LABEL_WORLD_W, LABEL_WORLD_H, LABEL_DV } from './texture.js';
 import { nearestLocation } from './pick.js';
 import { Pieces, BOARD_Y } from './pieces.js';
 import { Builder, PAL as P } from './builder.js';
-import { buildLandmarks } from './landmarks.js';
-import { createWater } from './water.js';
 
 const LAMP = { c532: '#ffb15c', c1580: '#ffc98a', c1933: '#ffdcae', bugun: '#fff0dd' };
 const LAMP_I = 3.4;
@@ -22,6 +20,9 @@ const INTRO_FROM = { az: -0.3, el: 1.42, zoom: 0.6 };
 const MAX_AZ = (25 * Math.PI) / 180;
 const LIM = { az: [-MAX_AZ, MAX_AZ], el: [0.62, 1.2], zoom: [0.75, 1.9] };
 const FOV = 34;
+// Çağa göre tahtaya çok hafif renk tonu (çarpan)
+const ERA_TINT = { c532: '#f1e1f3', c1580: '#ffffff', c1933: '#ffe8c2', bugun: '#e6eef6' };
+const CAP_R = 0.105; // kapalı mekân kapağı yarıçapı (dünya birimi; dairenin dış halkasını örter)
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const softLimit = (v, [lo, hi]) => (v < lo ? lo + (v - lo) * 0.3 : v > hi ? hi + (v - hi) * 0.3 : v);
 const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
@@ -47,22 +48,22 @@ function buildFrameAndProps() {
     b.cyl(sx * (W / 2 + 15), 15, sz * (H / 2 + 15), 5.4, 6, 2, P.gold, { metal: true, seg: 12, shade: 0 });
     b.dome(sx * (W / 2 + 15), 17, sz * (H / 2 + 15), 5, P.gold, { metal: true, seg: 12, shade: 0 });
   }
-  for (const s of [-1, 1]) for (const x of [-210, 0, 210]) b.dome(x, 15, s * (H / 2 + 15), 3.2, P.gold, { metal: true, shade: 0 });
-  for (const s of [-1, 1]) for (const z of [-80, 80]) b.dome(s * (W / 2 + 15), 15, z, 3.2, P.gold, { metal: true, shade: 0 });
+  for (const s of [-1, 1]) for (const x of [-150, 0, 150]) b.dome(x, 15, s * (H / 2 + 15), 3.2, P.gold, { metal: true, shade: 0 });
+  for (const s of [-1, 1]) for (const z of [-150, 0, 150]) b.dome(s * (W / 2 + 15), 15, z, 3.2, P.gold, { metal: true, shade: 0 });
   // şamdanlar
-  for (const x of [-510, 510]) {
+  for (const x of [-400, 400]) {
     b.cyl(x, 0, -265, 9, 12, 3, P.gold, { metal: true, seg: 12 });
     b.cyl(x, 3, -265, 2.2, 3, 22, P.gold, { metal: true, seg: 8 });
     b.cyl(x, 25, -265, 5.6, 3, 3, P.gold, { metal: true, seg: 12 });
     b.cyl(x, 28, -265, 3.2, 3.2, 18, P.white, { seg: 10 });
   }
   // tomar, mürekkep hokkası + kalem, bozuk paralar
-  b.cyl(498, 4.5, 130, 4.5, 4.5, 90, P.white, { seg: 10, rx: Math.PI / 2, shade: 0.03 });
-  b.cyl(498, 4.5, 85, 5.2, 5.2, 2, P.red, { seg: 10, rx: Math.PI / 2 });
-  b.cyl(-500, 0, 40, 6, 7, 9, P.dark, { seg: 10 });
-  b.box(-496, 9, 40, 1, 1, 34, P.white, { ry: 0.6 });
-  for (let i = 0; i < 4; i++) b.cyl(-480, i * 1.6, 160, 5, 5, 1.5, P.gold, { metal: true, seg: 10 });
-  b.cyl(-470, 0, 172, 5, 5, 1.5, P.gold, { metal: true, seg: 10, shade: 0 });
+  b.cyl(420, 4.5, 130, 4.5, 4.5, 90, P.white, { seg: 10, rx: Math.PI / 2, shade: 0.03 });
+  b.cyl(420, 4.5, 85, 5.2, 5.2, 2, P.red, { seg: 10, rx: Math.PI / 2 });
+  b.cyl(-420, 0, 40, 6, 7, 9, P.dark, { seg: 10 });
+  b.box(-416, 9, 40, 1, 1, 34, P.white, { ry: 0.6 });
+  for (let i = 0; i < 4; i++) b.cyl(-405, i * 1.6, 160, 5, 5, 1.5, P.gold, { metal: true, seg: 10 });
+  b.cyl(-395, 0, 172, 5, 5, 1.5, P.gold, { metal: true, seg: 10, shade: 0 });
   return b.build();
 }
 
@@ -148,7 +149,7 @@ export function createScene(host, { onPick, onLost, coarse }) {
   const haloGeo = new PlaneGeometry(0.9, 0.9);
   const haloMat = new MeshBasicMaterial({ map: glowTex, color: '#ffb35a', transparent: true, opacity: 0.55, depthWrite: false, blending: AdditiveBlending });
   const flames = [];
-  for (const x of [-5.1, 5.1]) {
+  for (const x of [-4, 4]) {
     const f = new Mesh(flameGeo, flameMat);
     f.position.set(x, 0.5, -2.65);
     const h = new Mesh(haloGeo, haloMat);
@@ -158,47 +159,67 @@ export function createScene(host, { onPick, onLost, coarse }) {
   }
   owned.push(glowTex, flameGeo, flameMat, haloGeo, haloMat);
 
-  // ---- tahta yüzeyi ----
-  const texScale = coarse ? 2 : TEX_SCALE;
-  const boardCanvas = document.createElement('canvas');
-  boardCanvas.width = Math.round(BOARD_W * texScale); boardCanvas.height = Math.round(BOARD_H * texScale);
-  const boardTex = new CanvasTexture(boardCanvas);
-  boardTex.colorSpace = SRGBColorSpace; boardTex.anisotropy = Math.min(8, maxAniso);
-  const boardMat = new MeshStandardMaterial({ map: boardTex, roughness: 0.8, metalness: 0 });
+  // ---- tahta yüzeyi: hazır sanat görseli (kare), sRGB, anisotropy ----
+  const boardTex = new TextureLoader().load(MAP_IMG, () => request());
+  boardTex.colorSpace = SRGBColorSpace;
+  boardTex.anisotropy = Math.min(8, maxAniso);
+  boardTex.minFilter = LinearMipmapLinearFilter;
+  boardTex.generateMipmaps = true;
+  const boardMat = new MeshStandardMaterial({ map: boardTex, roughness: 0.85, metalness: 0, emissive: '#ffffff', emissiveMap: boardTex, emissiveIntensity: 0.22 });
   const boardMesh = new Mesh(new PlaneGeometry(BOARD_W * SCALE, BOARD_H * SCALE), boardMat);
   boardMesh.rotation.x = -Math.PI / 2; boardMesh.position.y = BOARD_Y + 0.002; boardMesh.receiveShadow = true;
   scene.add(boardMesh);
   owned.push(boardTex, boardMat, boardMesh);
   const boardPlane = new Plane(new Vector3(0, 1, 0), -BOARD_Y);
 
-  // ---- su + tekneler ----
-  const water = createWater({ coarse });
-  water.mesh.position.y = BOARD_Y + 0.005;
-  water.setLevel(BOARD_Y + 0.005);
-  scene.add(water.mesh, water.boats);
-  owned.push(water);
-
-  // ---- simgesel yapılar (çağa göre yeniden kurulur) ----
-  let lm = null;
-  let lmKey = '';
-  function setLandmarks(eraId, state) {
-    const open = Object.keys(LOCATIONS).filter((id) => isOpen(state, id));
-    const key = `${eraId}|${open.join(',')}`;
-    if (key === lmKey) return;
-    lmKey = key;
-    if (lm) { scene.remove(lm.group); lm.dispose(); }
-    lm = buildLandmarks(eraId, open);
-    lm.group.position.y = BOARD_Y + 0.002;
-    scene.add(lm.group);
+  // ---- mekân etiketleri (dairenin altında, parşömen şerit) ve kapalı mekân kapakları ----
+  const labelGeo = new PlaneGeometry(LABEL_WORLD_W, LABEL_WORLD_H);
+  const capGeo = new CircleGeometry(CAP_R, 28);
+  const capMat = new MeshBasicMaterial({ color: '#0a0f1e', transparent: true, opacity: 0.84, depthWrite: false });
+  owned.push(labelGeo, capGeo, capMat);
+  const labels = {};
+  const labelGroup = new Group();
+  scene.add(labelGroup);
+  for (const [id, m] of Object.entries(LOC_UV)) {
+    const cvs = document.createElement('canvas');
+    cvs.width = LABEL_CW; cvs.height = LABEL_CH;
+    const tex = new CanvasTexture(cvs);
+    tex.colorSpace = SRGBColorSpace; tex.anisotropy = Math.min(8, maxAniso);
+    const mat = new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+    const mesh = new Mesh(labelGeo, mat);
+    const shift = LABEL_WORLD_W / 2 - 0.025 * BOARD_W * SCALE; // 'l'/'r' hizada şerit daireden bu kadar yana kayar
+    const w = uvToWorld(m.u, m.v + LABEL_DV);
+    mesh.position.set(w.x + (m.a === 'l' ? -shift : m.a === 'r' ? shift : 0), BOARD_Y + 0.012, w.z);
+    mesh.rotation.x = -Math.PI / 2; mesh.renderOrder = 4;
+    const cap = new Mesh(capGeo, capMat);
+    const c = uvToWorld(m.u, m.v);
+    cap.position.set(c.x, BOARD_Y + 0.008, c.z); cap.rotation.x = -Math.PI / 2; cap.renderOrder = 3; cap.visible = false;
+    labelGroup.add(mesh, cap);
+    labels[id] = { cvs, tex, mat, cap, key: '' };
+  }
+  owned.push({ dispose() { Object.values(labels).forEach((l) => { l.tex.dispose(); l.mat.dispose(); }); } });
+  // Çağ değişince: etiket adları, kapalı mekân kapakları, hafif ton
+  function applyEra(id, st) {
+    boardMat.color.set(ERA_TINT[id] || '#ffffff');
+    for (const [lid, l] of Object.entries(labels)) {
+      const open = isOpen(st, lid);
+      const name = labelName(st, lid);
+      l.cap.visible = !open;
+      const key = `${name}|${open}`;
+      if (key === l.key) continue;
+      l.key = key;
+      drawLabel(l.cvs.getContext('2d'), name, { open, a: LOC_UV[lid].a });
+      l.tex.needsUpdate = true;
+    }
   }
 
   const pieces = new Pieces(scene, () => request());
 
   // ---- mekân vurguları: ulaşılabilir (altın, nabız + dalga halkası), aktif oyuncu mekânı (turkuaz) ----
-  const ringGeo = new RingGeometry(0.22, 0.27, 40);
-  const rippleGeo = new RingGeometry(0.24, 0.26, 40);
-  const glowGeo = new CircleGeometry(0.3, 32);
-  const auraGeo = new RingGeometry(0.31, 0.34, 48);
+  const ringGeo = new RingGeometry(0.15, 0.185, 40);
+  const rippleGeo = new RingGeometry(0.165, 0.18, 40);
+  const glowGeo = new CircleGeometry(0.24, 32);
+  const auraGeo = new RingGeometry(0.22, 0.245, 48);
   owned.push(ringGeo, rippleGeo, glowGeo, auraGeo);
   const rings = {};
   function ringFor(id) {
@@ -209,7 +230,7 @@ export function createScene(host, { onPick, onLost, coarse }) {
     const ripple = new Mesh(rippleGeo, new MeshBasicMaterial({ color: '#ffe38a', transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending }));
     glow.position.z = -0.001; ripple.position.z = 0.001;
     g.add(glow, ring, ripple);
-    const w = toWorld(LOCATIONS[id].x, LOCATIONS[id].y);
+    const w = uvToWorld(LOC_UV[id].u, LOC_UV[id].v);
     g.rotation.x = -Math.PI / 2; g.position.set(w.x, BOARD_Y + 0.014, w.z);
     g.visible = false; g.userData = { ring, glow, ripple, ph: Math.random() * 6 };
     scene.add(g);
@@ -228,7 +249,7 @@ export function createScene(host, { onPick, onLost, coarse }) {
   let curLoc = null;
   let hover = null;
   function applyRings() {
-    for (const id of Object.keys(LOCATIONS)) {
+    for (const id of Object.keys(LOC_UV)) {
       const on = reachIds.includes(id);
       if (!on && !rings[id]) continue;
       const r = ringFor(id);
@@ -237,7 +258,7 @@ export function createScene(host, { onPick, onLost, coarse }) {
       r.userData.ring.material.color.set(r.userData.hover ? '#ffffff' : '#ffd24a');
     }
     aura.visible = !!curLoc;
-    if (curLoc) { const w = toWorld(LOCATIONS[curLoc].x, LOCATIONS[curLoc].y); aura.position.x = w.x; aura.position.z = w.z; }
+    if (curLoc) { const w = uvToWorld(LOC_UV[curLoc].u, LOC_UV[curLoc].v); aura.position.x = w.x; aura.position.z = w.z; }
   }
   function animateHighlights(sec) {
     for (const g of Object.values(rings)) {
@@ -263,8 +284,8 @@ export function createScene(host, { onPick, onLost, coarse }) {
   function baseDistance() {
     const t = Math.tan((FOV * Math.PI) / 360);
     const aspect = size.w / Math.max(1, size.h);
-    const dW = 4.75 / (t * aspect);
-    const dH = 3.3 / t;
+    const dW = 3.5 / (t * aspect);
+    const dH = 3.55 / t;
     return Math.max(dW, dH) * 1.02;
   }
   const look = new Vector3(0, 0.1, 0.35);
@@ -335,7 +356,6 @@ export function createScene(host, { onPick, onLost, coarse }) {
       if (lampTween.t >= lampTween.dur) lampTween = null; else active = true;
     }
     const amb = ambientOn();
-    water.update(sec, !amb);
     if (amb) {
       pieces.animate(sec);
       animateHighlights(sec);
@@ -372,8 +392,8 @@ export function createScene(host, { onPick, onLost, coarse }) {
     ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     if (!ray.ray.intersectPlane(boardPlane, hit)) return null;
-    const b = toBoard(hit.x, hit.z);
-    return nearestLocation(b.x, b.y, coarse ? 30 : 22, only);
+    const t = toUV(hit.x, hit.z);
+    return nearestLocation(t.u, t.v, coarse ? 0.058 : 0.04, only);
   }
 
   // ---- işaretçi: sürükle = döndür (sınırda lastik gibi direnir, bırakınca yerine döner), iki parmak/tekerlek = yakınlaştır, dokun = seç ----
@@ -446,11 +466,7 @@ export function createScene(host, { onPick, onLost, coarse }) {
   let swapping = false;
   function setEra(id, motion, redrawState) {
     const apply = () => {
-      const st = redrawState();
-      drawBoardTexture(boardCanvas.getContext('2d'), st, texScale);
-      boardTex.needsUpdate = true;
-      setLandmarks(id, st);
-      water.setEra(id);
+      applyEra(id, redrawState());
       lamp.color.set(LAMP[id] || '#ffc98a');
       eraId = id; swapping = false;
       request();
@@ -498,7 +514,6 @@ export function createScene(host, { onPick, onLost, coarse }) {
       ro.disconnect();
       document.removeEventListener('visibilitychange', onVis);
       pieces.dispose();
-      if (lm) lm.dispose();
       owned.forEach((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); o.dispose?.(); });
       renderer.dispose();
       renderer.forceContextLoss();
