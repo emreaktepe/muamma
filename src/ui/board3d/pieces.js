@@ -1,9 +1,10 @@
 // Piyonlar ve jetonlar: paylaşılan geometri/malzeme, anahtarlı eşitleme, küçük tween sistemi.
 import {
   Group, Mesh, MeshStandardMaterial, CylinderGeometry, BoxGeometry, ExtrudeGeometry, Shape, TorusGeometry,
-  TextureLoader, SRGBColorSpace,
+  TextureLoader, SRGBColorSpace, CircleGeometry, CanvasTexture, MeshBasicMaterial, AdditiveBlending,
 } from 'three';
 import { toWorld } from './model.js';
+import { drawGlow } from './texture.js';
 
 export const BOARD_Y = 0.105; // tahta yüzeyinin masadan yüksekliği
 
@@ -35,6 +36,11 @@ export class Pieces {
     this.gameKey = null;
     this.loader = new TextureLoader();
     this.avatarTex = new Map();
+    const gc = document.createElement('canvas');
+    gc.width = gc.height = 64;
+    drawGlow(gc.getContext('2d'), 64, 64);
+    this.glowTex = new CanvasTexture(gc);
+    const glow = (color, opacity) => new MeshBasicMaterial({ map: this.glowTex, color, transparent: true, opacity, depthWrite: false, blending: AdditiveBlending });
 
     const std = (color, extra = {}) => new MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.1, ...extra });
     this.mat = {
@@ -46,6 +52,8 @@ export class Pieces {
       stolen: std('#7d7869', { transparent: true, opacity: 0.5, roughness: 0.9 }),
       pawnSide: std('#2a2018', { roughness: 0.6 }),
       ring: new MeshStandardMaterial({ color: '#ffd24a', emissive: '#ffb300', emissiveIntensity: 0.9, roughness: 0.3 }),
+      glowOpen: glow('#ff7a5a', 0.7),
+      glowSafe: glow('#ffd24a', 0.8),
     };
     this.geo = {
       star: starGeometry(),
@@ -58,6 +66,7 @@ export class Pieces {
       body: new CylinderGeometry(0.17, 0.17, 0.035, 24),
       bar: new BoxGeometry(0.22, 0.012, 0.045),
       ring: new TorusGeometry(0.2, 0.022, 8, 28),
+      glow: new CircleGeometry(0.42, 28),
     };
   }
 
@@ -109,6 +118,10 @@ export class Pieces {
     const add = (geo, mat, y = 0, x = 0, z = 0) => { const mesh = new Mesh(geo, mat); mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh); return mesh; };
     if (t.kind === 'tilsim') {
       g.userData.star = add(this.geo.star, m.coral);
+      const gl = new Mesh(this.geo.glow, m.glowOpen);
+      gl.rotation.x = -Math.PI / 2; gl.position.y = 0.012; gl.renderOrder = 3;
+      g.add(gl);
+      g.userData.glow = gl;
     } else if (t.kind === 'guard') {
       add(this.geo.guard, m.turq, 0.14);
       add(this.geo.guardTop, m.gold, 0.3);
@@ -131,10 +144,33 @@ export class Pieces {
       star.material = t.state === 'stolen' ? this.mat.stolen : t.state === 'safe' ? this.mat.gold : this.mat.coral;
       star.scale.y = t.state === 'stolen' ? 0.4 : 1;
       star.castShadow = t.state !== 'stolen';
+      if (t.state === 'stolen') { star.position.y = 0; star.rotation.y = 0; }
+      const gl = entry.group.userData.glow;
+      gl.visible = t.state !== 'stolen';
+      gl.material = t.state === 'safe' ? this.mat.glowSafe : this.mat.glowOpen;
     }
   }
 
   tokenY(t) { return BOARD_Y + 0.005 + t.level * 0.05; }
+
+  // Boşta süren hafif animasyonlar (tılsım yıldızı dönüşü/ışıltısı, aktif piyon halkası); sec: saniye
+  animate(sec) {
+    this.mat.glowOpen.opacity = 0.5 + 0.3 * Math.sin(sec * 2.4);
+    this.mat.glowSafe.opacity = 0.62 + 0.18 * Math.sin(sec * 1.8 + 1);
+    for (const e of this.tokens.values()) {
+      const u = e.group.userData;
+      if (!u.star || e.state === 'stolen') continue;
+      u.star.rotation.y = sec * 0.9;
+      u.star.position.y = 0.05 + Math.sin(sec * 2 + e.group.position.x) * 0.018;
+      u.glow.scale.setScalar(1 + 0.12 * Math.sin(sec * 2.4));
+    }
+    for (const e of this.pawns.values()) {
+      if (!e.cur) continue;
+      const r = e.group.userData.ring;
+      r.scale.setScalar(1 + 0.07 * Math.sin(sec * 4));
+    }
+  }
+  get ambientActive() { for (const e of this.tokens.values()) if (e.state !== 'stolen' && e.group.userData.star) return true; return [...this.pawns.values()].some((e) => e.cur); }
 
   // ---- tween ----
   tween(dur, fn, done) {
@@ -240,5 +276,6 @@ export class Pieces {
     Object.values(this.geo).forEach((g) => g.dispose());
     Object.values(this.mat).forEach((m) => m.dispose());
     this.avatarTex.forEach((t) => t.dispose());
+    this.glowTex.dispose();
   }
 }

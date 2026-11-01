@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, startGame, act, currentPlayer, reachable } from '../src/game/engine.js';
 import { LOCATIONS } from '../src/game/data/locations.js';
-import { snapshot, a11yHTML, toWorld, toBoard } from '../src/ui/board3d/model.js';
+import { snapshot, a11yHTML, toWorld, toBoard, landmarkAnchor } from '../src/ui/board3d/model.js';
 import { nearestLocation } from '../src/ui/board3d/pick.js';
-import { drawBoardTexture, drawWoodTexture } from '../src/ui/board3d/texture.js';
+import { drawBoardTexture, drawWoodTexture, drawWaterMask, drawVignette, drawGlow, labelLayout, isLand, SHAPES, TEX_W, TEX_H } from '../src/ui/board3d/texture.js';
+import { buildLandmarks, hasLandmark } from '../src/ui/board3d/landmarks.js';
+import { isOpen } from '../src/game/engine.js';
 
 const players = Array.from({ length: 5 }, (_, i) => ({ name: `B${i}`, isBot: i > 0 }));
 function dayGame() {
@@ -107,5 +109,66 @@ describe('3D tahta: dokular', () => {
     const ctx = fakeCtx();
     expect(() => drawWoodTexture(ctx, 256, 128)).not.toThrow();
     expect(ctx.calls.length).toBeGreaterThan(100);
+  });
+});
+
+describe('3D tahta: harita coğrafyası ve etiketler', () => {
+  it('doku boyutu 2048 sınırını aşmaz', () => {
+    expect(TEX_W).toBeLessThanOrEqual(2048);
+    expect(TEX_H).toBeLessThanOrEqual(2048);
+  });
+  it('her mekân ve simgesel yapı noktası karada (Kız Kulesi kayalıkta)', () => {
+    for (const [id, L] of Object.entries(LOCATIONS)) {
+      expect(isLand(L.x, L.y), id).toBe(true);
+      const a = landmarkAnchor(id);
+      expect(isLand(a.x, a.y), id + ' anchor').toBe(true);
+    }
+    expect(SHAPES.length).toBeGreaterThanOrEqual(4);
+  });
+  it('etiketler tahta içinde kalır ve birbirinin üstüne binmez (tüm çağlar)', () => {
+    const s = dayGame();
+    for (let i = 0; i < 4; i++) {
+      s.eraIndex = i;
+      const items = labelLayout(s);
+      expect(items).toHaveLength(Object.keys(LOCATIONS).length);
+      for (const it of items) { expect(it.left).toBeGreaterThanOrEqual(14); expect(it.right).toBeLessThanOrEqual(826); }
+      for (let a = 0; a < items.length; a++) for (let b = a + 1; b < items.length; b++) {
+        const A = items[a], B = items[b];
+        const overlap = A.left < B.right && B.left < A.right && A.top < B.bottom && B.top < A.bottom;
+        expect(overlap, `${A.id} x ${B.id} (çağ ${i})`).toBe(false);
+      }
+    }
+  });
+  it('su maskesi, vinyet ve parlama dokuları çizilir', () => {
+    for (const fn of [(c) => drawWaterMask(c, 420, 220), (c) => drawVignette(c, 64, 64), (c) => drawGlow(c, 64, 64)]) {
+      const ctx = fakeCtx();
+      expect(() => fn(ctx)).not.toThrow();
+      expect(ctx.calls.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('3D tahta: simgesel yapılar', () => {
+  it('her mekânın bir yapısı vardır', () => {
+    for (const id of Object.keys(LOCATIONS)) expect(hasLandmark(id), id).toBe(true);
+  });
+  it('yalnız açık mekânlar için yapı kurulur; üçgen sayısı makul', () => {
+    const s = dayGame();
+    for (let i = 0; i < 4; i++) {
+      s.eraIndex = i;
+      const open = Object.keys(LOCATIONS).filter((id) => isOpen(s, id));
+      const lm = buildLandmarks(['c532', 'c1580', 'c1933', 'bugun'][i], open);
+      let tris = 0;
+      for (const m of lm.group.children) { expect(m.geometry.attributes.color).toBeDefined(); tris += m.geometry.index ? m.geometry.index.count / 3 : m.geometry.attributes.position.count / 3; }
+      expect(lm.group.children.length).toBeLessThanOrEqual(2);
+      expect(tris).toBeGreaterThan(300);
+      expect(tris).toBeLessThan(25000);
+      lm.dispose();
+    }
+  });
+  it('çağa göre değişir: Ayasofya inşaatında minare yok, sonra var', () => {
+    const tri = (era) => { const lm = buildLandmarks(era, ['ayasofya']); const n = lm.group.children.reduce((t, m) => t + m.geometry.index.count / 3, 0); lm.dispose(); return n; };
+    expect(tri('c1580')).toBeGreaterThan(tri('c532') * 0.8);
+    expect(tri('c1580')).not.toBe(tri('c532'));
   });
 });

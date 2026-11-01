@@ -10,7 +10,15 @@ export const SCALE = 0.01; // 1 tahta birimi = 0.01 dünya birimi
 export const toWorld = (x, y) => ({ x: (x - BOARD_W / 2) * SCALE, z: (y - BOARD_H / 2) * SCALE });
 export const toBoard = (wx, wz) => ({ x: wx / SCALE + BOARD_W / 2, y: wz / SCALE + BOARD_H / 2 });
 
-const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Simgesel yapının oturduğu nokta (tahta uzayı): etiketin tersi yönde ~14 birim; piyon/jeton ve etiket açık kalır.
+export function landmarkAnchor(id) {
+  const L = LOCATIONS[id];
+  const [dx, dy] = L.label;
+  const n = Math.hypot(dx, dy) || 1;
+  return { x: L.x - (dx / n) * 17, y: L.y - (dy / n) * 17 };
+}
+
+const esc =(t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Aynı mekândaki piyonların yerleşimi (2D tahta ile aynı düzen).
 function pawnSlot(L, i, n) {

@@ -1,0 +1,11 @@
+.audio-fab {
+  position: fixed; right: 14px; bottom: 14px; z-index: 50;
+  width: 40px; height: 40px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; font-size: 1.1rem; line-height: 1; cursor: pointer;
+  background: #0a1328; color: var(--parch, #EFE3C8);
+  border: 1px solid var(--gold, #C9A43A); box-shadow: 0 4px 14px rgba(0,0,0,.5);
+  opacity: .8; transition: opacity .2s, transform .2s;
+}
+.audio-fab:hover, .audio-fab:focus-visible { opacity: 1; transform: scale(1.06); }
+.audio-fab:focus-visible { outline: 2px solid var(--gold, #C9A43A); outline-offset: 2px; }
+.audio-fab[aria-pressed="true"] { opacity: .55; }
